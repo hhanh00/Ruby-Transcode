@@ -15,6 +15,8 @@ $mkvmergePath = project["mkvmerge"]
 
 $demuxPath = $meguiPath + '\tools\dgindex\DGIndex.exe'
 
+$last_mounted = nil
+
 class Crop
   attr_accessor :top, :bottom, :left, :right
   def initialize(left, top, right, bottom)
@@ -65,19 +67,19 @@ class Sub
 end
 
 class Disk
-  attr_accessor :image
-  def initialize(image)
+  attr_accessor :image, :ord
+  def initialize(image, ord)
     @image = image
-    @mounted = false
+    @ord = ord
   end
   
   def mount
-    if !@mounted then
+    if $last_mounted != @image then
       puts "Mounting image file %s" % @image
       mount_cmd = "\"%s\" -mount %d,\"%s\"" % [$clonedrivePath, $clonedriveIndex, @image]
       %x{#{mount_cmd}}
       sleep 10
-      @mounted = true
+      $last_mounted = @image
     end
   end
 end
@@ -293,11 +295,12 @@ class Track
     @video_stream = video_stream
     @audio_streams = audio_streams
     @sub_streams = sub_streams
-    @tempdir = "%s\\%d.%d" % [$tempdir, @vts, @pgc]
+    @tempdir = "%s\\%d.%d.%d" % [$tempdir, @disk.ord, @vts, @pgc]
   end
   
   def run
     puts "Processing %s" % @name
+    @disk.mount
     decrypt
     demux
     parse_stream_file
@@ -391,8 +394,8 @@ c = Crop.new(project["crop"]["left"], project["crop"]["top"], project["crop"]["r
 video_stream = Video.new(c, project["bitrate"])
 audio_streams = project["audio"].map { |lang| Audio.new(lang) }
 sub_streams = project["sub"].map { |lang| Sub.new(lang) }
-project["disk"].each do |d|
-  disk = Disk.new(d["image"])
+project["disk"].each_with_index do |d, i|
+  disk = Disk.new(d["image"], i + 1)
   disk.mount
   title_map = parse_vmg
   format_name = d["name"]
