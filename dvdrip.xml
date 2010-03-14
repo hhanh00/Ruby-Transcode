@@ -1,0 +1,27 @@
+<dvdrip outdir="e:\two" >
+	<template>
+		<video dar="16:9" bitrate="1200" >
+			<crop top="0" left="0" right="0" bottom="0" />
+		</video>
+		<audio>
+			<stream language="English" />
+		</audio>
+		<sub>
+			<stream language="English" />
+		</sub>
+	</template>
+	<disk image="e:\TWO_AND_A_HALF_MEN_SEASON_2_D1.iso" 
+	name="Two and a Half Men - S02E#{'%02d' % episode} - #{name}">
+		<tracks pgc="2+" vts="1" episode="1+">
+			<track name="Back Off, Mary Poppins" />
+			<track name="Enjoy Those Garlic Balls" />
+			<!--
+			<track name="A Bag Full of Jawea" />
+			<track name="Go Get Mommy's Bra" />
+			<track name="Bad News From The Clinic" />
+			<track name="The Price of Healthy Gums Is Eternal Vigilance" />
+			<track name="A Kosher Slaughterhouse Out In Fontana" />
+			-->
+		</tracks>
+	</disk>
+</dvdrip>
