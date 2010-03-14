@@ -1,5 +1,6 @@
 require "rexml/document"
 require "fileutils"
+require "yaml"
 $tempdir = 'D:\TEMPRIP'
 
 $clonedrivePath = 'C:\Program Files\Elaborate Bytes\VirtualCloneDrive\Daemon.exe'
@@ -19,6 +20,9 @@ class Crop
 		@top = top
 		@right = right
 		@bottom = bottom
+	end
+	def to_s
+		"%d/%d/%d/%d" % [@left, @top, @right, @bottom]
 	end
 end
 
@@ -358,6 +362,7 @@ class Track
 	end
 end
 
+project = YAML::load(File.read('dvdrip.yaml'))
 file = File.new("dvdrip.xml")
 doc = REXML::Document.new file
 
@@ -367,48 +372,27 @@ video_stream = nil
 tracks = []
 outdir = nil
 
-doc.elements.each('/dvdrip') do |e|
-	outdir = e.attributes["outdir"]
-	e.elements.each('template') do |t|
-		t.elements.each('video') do |v| 
-			v.elements.each('crop') do |c| 
-				c = Crop.new(c.attributes["left"].to_i, c.attributes["top"].to_i, 
-					c.attributes["right"].to_i, c.attributes["bottom"].to_i)
-				video_stream = Video.new(c, v.attributes["dar"], v.attributes["bitrate"].to_i)
-			end
-		end
-	
-		t.elements.each('audio') do |a| 
-			a.elements.each('stream') do |t|
-				audio_streams << Audio.new(t.attributes["language"])
-			end
-		end
-		
-		t.elements.each('sub') do |s| 
-			s.elements.each('stream') do |t|
-				sub_streams << Sub.new(t.attributes["language"])
-			end
-		end
-	end
-	
-	e.elements.each('disk') do |d|
-		disk = Disk.new(d.attributes["image"])
-		format_name = d.attributes["name"]
-		d.elements.each('tracks') do |ts|
-			ipgc = IncInt.new(ts.attributes["pgc"])
-			ivts = IncInt.new(ts.attributes["vts"])
-			iepisode = IncInt.new(ts.attributes["episode"])
-			ts.elements.each('track') do |t|
-				pgc, vts, episode = ipgc.value, ivts.value, iepisode.value
-				name = t.attributes["name"]
-				track_name = eval "\"#{format_name}\""
-				ipgc.next
-				ivts.next
-				iepisode.next
-				tracks << Track.new(outdir, vts, pgc, track_name, disk, video_stream, audio_streams, sub_streams)
-			end
-		end
-	end
+outdir = project["outdir"]
+c = Crop.new(project["crop"]["left"], project["crop"]["top"], project["crop"]["right"], project["crop"]["bottom"])
+video_stream = Video.new(c, project["dar"], project["bitrate"])
+audio_streams = project["audio"].map { |lang| Audio.new(lang) }
+sub_streams = project["sub"].map { |lang| Sub.new(lang) }
+project["disk"].each do |d|
+	disk = Disk.new(d["image"])
+	format_name = d["name"]
+	d["tracks"].each do |t|
+    ipgc = IncInt.new(t["pgc"])
+    ivts = IncInt.new(t["vts"])
+    iepisode = IncInt.new(t["episode"])
+    t["track"].each do |name|
+      pgc, vts, episode = ipgc.value, ivts.value, iepisode.value
+      track_name = eval "\"#{format_name}\""
+      ipgc.next
+      ivts.next
+      iepisode.next
+      tracks << Track.new(outdir, vts, pgc, track_name, disk, video_stream, audio_streams, sub_streams)
+    end
+  end
 end
 
 tracks.each { |t| t.run }

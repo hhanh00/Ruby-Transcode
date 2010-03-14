@@ -1,0 +1,26 @@
+---
+outdir: e:\two
+dar: "16:9"
+bitrate: 1200
+crop:
+  top: 0,
+  left: 0,
+  right: 0,
+  bottom: 0
+audio:
+- English
+sub:
+- English
+disk:
+- image: e:\TWO_AND_A_HALF_MEN_SEASON_2_D2.iso
+  name: "Two and a Half Men - S02E#{'%02d' % episode} - #{name}"
+  tracks:
+  - vts: "1"
+    pgc: 4+
+    episode: 10+
+    track:
+    - The Salmon Under My Sweater
+    - Last Chance To See Those Tattoos
+    - A Lungful Of Alan
+    - Zejdz Z Moich Wlosów (Get Off My Hair)
+    - Those Big Pink Things With Coconut
