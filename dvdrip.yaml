@@ -3,7 +3,7 @@ x264preset: slower
 clonedrive:
   path: C:\Program Files\Elaborate Bytes\VirtualCloneDrive\Daemon.exe
   letter: F
-  index: 0
+  index: 1
 decrypter: C:\Program Files\DVD Decrypter\DVDDecrypter.exe
 mkvmerge: C:\Program Files\MKVtoolnix\mkvmerge.exe
 megui: C:\Program Files\megui
