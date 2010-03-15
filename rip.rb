@@ -1,3 +1,4 @@
+require 'WIN32OLE'
 require "fileutils"
 require "yaml"
 
@@ -18,7 +19,7 @@ $demuxPath = $meguiPath + '\tools\dgindex\DGIndex.exe'
 $last_mounted = nil
 
 class Crop
-  attr_accessor :top, :bottom, :left, :right
+  attr_reader :top, :bottom, :left, :right
   def initialize(left, top, right, bottom)
     @left = left
     @top = top
@@ -31,8 +32,8 @@ class Crop
 end
 
 class Video
-  attr_accessor :crop, :bitrate
-  attr_reader :dx, :dy
+  attr_accessor :crop
+  attr_reader :bitrate, :dx, :dy
   def initialize(crop, bitrate)
     @crop = crop
     @bitrate = bitrate
@@ -134,6 +135,8 @@ class VideoStream < Stream
   end
   
   def encode
+    precrop_avs
+    autocrop
     avs
     encode1
     encode2
@@ -146,7 +149,7 @@ class VideoStream < Stream
   end
   
 private
-  def avs
+  def precrop_avs
     path = "%s\\VTS_%02d" % [@track.tempdir, @track.vts]
     c = @track.video_stream.crop
     x = <<EOS
@@ -155,10 +158,34 @@ DGDecode_mpeg2source("%s_1.d2v", info=3)
 LoadPlugin("%s\\tools\\avisynth_plugin\\ColorMatrix.dll")
 ColorMatrix(hints=true, threads=0)
 EOS
-    avs_file = File.open(path + '.avs', 'w') do |file|
-      file << x % [$meguiPath, path, $meguiPath]
+    avs_file = File.open(path + '-precrop.avs', 'w') do |file|
+      file.puts x % [$meguiPath, path, $meguiPath]
+    end
+  end
+  
+  def autocrop
+    if @track.video_stream.crop == nil then
+      path_precrop_avs = "%s\\VTS_%02d-precrop.avs" % [@track.tempdir, @track.vts]
+      ac = WIN32OLE.new('autocroplib.AutoCrop')
+      ac.GetAutoCropValues(path_precrop_avs)
+      c = Crop.new(ac.left, ac.top, ac.right, ac.bottom)
+      puts 'Autocrop to %s' % c
+      @track.video_stream.crop = c
+    end
+  end
+    
+  def avs
+    path_precrop_avs = "%s\\VTS_%02d-precrop.avs" % [@track.tempdir, @track.vts]
+    path_avs = "%s\\VTS_%02d.avs" % [@track.tempdir, @track.vts]
+    File.open(path_avs, 'w') do |w|
+      File.open(path_precrop_avs, 'r') do |r|
+        while line = r.gets
+          w.puts line
+        end
+      end
+      c = @track.video_stream.crop
       if c.left != 0 || c.right != 0 || c.top != 0 || c.bottom != 0 then
-        file << "crop(%d, %d, -%d, -%d)" % [c.left, c.top, c.right, c.bottom]
+        w.puts "crop(%d, %d, -%d, -%d)" % [c.left, c.top, c.right, c.bottom]
       end
     end
   end
@@ -316,6 +343,7 @@ class Track
   end
   
   def parse_stream_file
+    puts "Parsing stream info file"
     @streams = []
     sub_streams = []
     stream_file = File.open("%s\\VTS_%02d - Stream Information.txt" % [@tempdir, @vts], 'r') do |file|
@@ -324,7 +352,8 @@ class Track
         id, type, info = line.split(' - ', 3)
         case type
         when "Subtitle"
-          language, x = info.split(' - ', 2)
+          info =~ /(\w+)/
+          language = $1
           info =~ /SubPicture (\d+)/
           index = $1.to_i - 1
           t = @sub_streams.find { |t| t.language == language }
@@ -390,7 +419,9 @@ end
 
 tracks = []
 outdir = project["outdir"]
-c = Crop.new(project["crop"]["left"], project["crop"]["top"], project["crop"]["right"], project["crop"]["bottom"])
+if project["crop"] != nil then
+  c = Crop.new(project["crop"]["left"], project["crop"]["top"], project["crop"]["right"], project["crop"]["bottom"])
+end
 video_stream = Video.new(c, project["bitrate"])
 audio_streams = project["audio"].map { |lang| Audio.new(lang) }
 sub_streams = project["sub"].map { |lang| Sub.new(lang) }

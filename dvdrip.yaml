@@ -10,11 +10,6 @@ megui: C:\Program Files\megui
 tempdir: D:\TEMPRIP
 outdir: e:\two
 bitrate: 1200
-crop:
-  top: 0,
-  left: 0,
-  right: 0,
-  bottom: 0
 audio:
 - English
 sub:
@@ -29,3 +24,32 @@ disk:
     - A Lungful Of Alan
     - Zejdz Z Moich Wlosów (Get Off My Hair)
     - Those Big Pink Things With Coconut
+---
+x264preset: ultrafast
+clonedrive:
+  path: C:\Program Files\Elaborate Bytes\VirtualCloneDrive\Daemon.exe
+  letter: F
+  index: 1
+decrypter: C:\Program Files\DVD Decrypter\DVDDecrypter.exe
+mkvmerge: C:\Program Files\MKVtoolnix\mkvmerge.exe
+megui: C:\Program Files\megui
+tempdir: D:\TEMPRIP
+outdir: E:\DVD
+bitrate: 1400
+crop:
+  top: 0,
+  left: 0,
+  right: 0,
+  bottom: 0
+audio:
+- English
+sub:
+- English
+disk:
+- image: G:\dvd\THERES_SOMETHING_ABOUT_MARY_16X9.iso
+  name: "#{name}"
+  tracks:
+  - title: "2"
+    episode: 1+
+    track:
+    - There is Something About Mary
