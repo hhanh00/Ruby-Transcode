@@ -112,9 +112,10 @@ class Stream
 end
 
 class AudioStream < Stream
-  attr_reader :audio_filename
-  def initialize(track, id, info, stream)
+  attr_reader :audio_filename, :channels
+  def initialize(track, id, channels, info, stream)
     super track, id, info, stream
+    @channels = channels
     track_number = "T%02x" % id
     @audio_filename = Dir.foreach(@track.tempdir).find { |f| f =~ /#{track_number}/ }
     @audio_filename =~ /DELAY (.*)ms/
@@ -235,7 +236,7 @@ class VobSubStream < Stream
   def mux
     path = "%s\\\VTS_%02d-fix.IDX" % [@track.tempdir, @track.vts]
     x = @sub_streams.zip(0...@sub_streams.length)
-    arg = x.inject("") { |s, a| s + a[0].mux(a[1]) }
+    arg = x.inject("") { |s, a| s + ' ' + a[0].mux(a[1]) }
     arg + " -s %s -D -A -T \"%s\"" % [(0...@sub_streams.length).to_a.join(','), path]
   end
 
@@ -248,7 +249,7 @@ private
       f.puts "%s\\VTS_%02d" % [@track.tempdir, @track.vts]
       f.puts @track.pgc
       f.puts 0
-      @sub_streams.each { |s| f.puts "#{s.id} " }
+      f.puts @sub_streams.inject("") { |acc, s| acc + "#{s.id} " }
       f.puts 'CLOSE'
       end
       
@@ -345,7 +346,10 @@ class Track
   def parse_stream_file
     puts "Parsing stream info file"
     @streams = []
+    aud_streams = []
     sub_streams = []
+    sub_index = 0
+    max_channels = 0
     stream_file = File.open("%s\\VTS_%02d - Stream Information.txt" % [@tempdir, @vts], 'r') do |file|
       while line = file.gets
         s = nil
@@ -354,25 +358,37 @@ class Track
         when "Subtitle"
           info =~ /(\w+)/
           language = $1
-          info =~ /SubPicture (\d+)/
-          index = $1.to_i - 1
           t = @sub_streams.find { |t| t.language == language }
-          sub_streams << SubtitleStream.new(self, index, info, t) if t
+          sub_streams << SubtitleStream.new(self, sub_index, info, t) if t
+          sub_index += 1
         when "Audio"
           info = info.split(' / ', 8)
+          codec = info[0]
+          channels = info[1]
+          channels =~ /(\d+)ch/
+          channels = $1.to_i
+          max_channels = channels if channels > max_channels
           language = info[4]
-          t = @audio_streams.find { |t| t.language == language }
-          s = AudioStream.new(self, id, info, t) if t
+          if codec == 'AC3' then
+            t = @audio_streams.find { |t| t.language == language }
+            aud_streams << AudioStream.new(self, id, channels, info, t) if t
+          end
         when "Video"
           info = info.split(' / ', 7)
           dar = info[2]
           @video_stream.set_dar(dar)
           s = VideoStream.new(self, id, info, @video_stream)
+          @streams << s
         end
-        @streams << s if s
       end
     end
 
+    aud_streams = aud_streams.reduce([]) do |acc, s| 
+      acc << s if s.channels >= max_channels
+      acc
+    end
+    
+    @streams = @streams.concat(aud_streams)
     @streams << VobSubStream.new(self, sub_streams) if sub_streams.length != 0
     @streams << ChapterStream.new(self, "%s\\VTS_%02d - Chapter Information - OGG.txt" % [@tempdir, @vts])
   end
@@ -392,7 +408,7 @@ class Track
   def mux
     puts "Remuxing"
     path = "%s\\%s.mkv" % [@outdir, @name]
-    mux_cmd = "%s -o \"%s\"" % [$mkvmergePath, path] + @streams.reduce("") { |arg, s| arg + ' ' + s.mux }
+    mux_cmd = "\"%s\" -o \"%s\"" % [$mkvmergePath, path] + @streams.reduce("") { |arg, s| arg + ' ' + s.mux }
     %x{#{mux_cmd}}
   end
 end
