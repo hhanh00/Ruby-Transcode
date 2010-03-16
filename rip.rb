@@ -33,9 +33,10 @@ end
 
 class Video
   attr_accessor :crop
-  attr_reader :bitrate, :dx, :dy
+  attr_reader :bitrate, :dx, :dy, :autocrop
   def initialize(crop, bitrate)
     @crop = crop
+    @autocrop = (crop == nil)
     @bitrate = bitrate
   end
   
@@ -165,7 +166,7 @@ EOS
   end
   
   def autocrop
-    if @track.video_stream.crop == nil then
+    if @track.video_stream.autocrop then
       path_precrop_avs = "%s\\VTS_%02d-precrop.avs" % [@track.tempdir, @track.vts]
       ac = WIN32OLE.new('autocroplib.AutoCrop')
       ac.GetAutoCropValues(path_precrop_avs)
