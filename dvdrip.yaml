@@ -2,8 +2,8 @@
 x264preset: slower
 clonedrive:
   path: C:\Program Files\Elaborate Bytes\VirtualCloneDrive\Daemon.exe
-  letter: F
-  index: 1
+  letter: K
+  index: 0
 decrypter: C:\Program Files\DVD Decrypter\DVDDecrypter.exe
 mkvmerge: C:\Program Files\MKVtoolnix\mkvmerge.exe
 megui: C:\Program Files\megui
@@ -15,15 +15,24 @@ audio:
 sub:
 - English
 disk:
-- image: e:\TWO_AND_A_HALF_MEN_SEASON_2_D2.iso
+- image: e:\TWO_AND_A_HALF_MEN_SEASON_2_D3.iso
   name: "Two and a Half Men - S02E#{'%02d' % episode} - #{name}"
   tracks:
-  - title: "6+"
-    episode: 12+
+  - title: 6
+    episode: 19
     track:
-    - A Lungful Of Alan
-    - Zejdz Z Moich Wlosów (Get Off My Hair)
-    - Those Big Pink Things With Coconut
+    - A Low, Guttural Tongue-Flapping Noise
+    - I Always Wanted A Shaved Monkey
+    - A Sympathetic Crotch To Cry On
+- image: e:\TWO_AND_A_HALF_MEN_SEASON_2_D4.iso
+  name: "Two and a Half Men - S02E#{'%02d' % episode} - #{name}"
+  tracks:
+  - title: 2
+    episode: 22
+    track:
+    - That Old Hose Bag Is My Mother
+    - Squab, Squab, Squab, Squab, Squab
+    - Does This Smell Funny To You
 ---
 x264preset: ultrafast
 clonedrive:
@@ -49,7 +58,7 @@ disk:
 - image: G:\dvd\THERES_SOMETHING_ABOUT_MARY_16X9.iso
   name: "#{name}"
   tracks:
-  - title: "2"
-    episode: 1+
+  - title: 2
+    episode: 1
     track:
     - There is Something About Mary

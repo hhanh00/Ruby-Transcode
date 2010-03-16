@@ -86,19 +86,6 @@ class Disk
   end
 end
 
-class IncInt
-  attr_reader :value
-  def initialize(str)
-    str =~ /(\d+)(\+?)/
-    @value = $1.to_i
-    @inc = $2
-  end
-  
-  def next
-    @value += 1 if @inc == '+' 
-  end
-end
-
 class Stream
   attr_reader :id, :info, :stream
   def initialize(track, id, info, stream)
@@ -448,15 +435,14 @@ project["disk"].each_with_index do |d, i|
   title_map = parse_vmg
   format_name = d["name"]
   d["tracks"].each do |t|
-    ititle = IncInt.new(t["title"])
-    iepisode = IncInt.new(t["episode"])
+    title = t["title"]
+    episode = t["episode"]
     t["track"].each do |name|
-      title, episode = ititle.value, iepisode.value
       vts = title_map[title]["vts"]
       pgc = title_map[title]["pgc"]
       track_name = eval "\"#{format_name}\""
-      ititle.next
-      iepisode.next
+      title += 1
+      episode += 1
       tracks << Track.new(outdir, vts, pgc, track_name, disk, video_stream, audio_streams, sub_streams)
     end
   end
