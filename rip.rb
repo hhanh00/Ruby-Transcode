@@ -36,7 +36,7 @@ class Video
   attr_reader :bitrate, :dx, :dy, :autocrop
   def initialize(crop, bitrate)
     @crop = crop
-    @autocrop = (crop == nil)
+    @autocrop = crop.nil?
     @bitrate = bitrate
   end
   
@@ -167,10 +167,8 @@ EOS
     path_precrop_avs = "%s\\VTS_%02d-precrop.avs" % [@track.tempdir, @track.vts]
     path_avs = "%s\\VTS_%02d.avs" % [@track.tempdir, @track.vts]
     File.open(path_avs, 'w') do |w|
-      File.open(path_precrop_avs, 'r') do |r|
-        while line = r.gets
-          w.puts line
-        end
+      File.foreach(path_precrop_avs) do |line|
+        w.puts line
       end
       c = @track.video_stream.crop
       if c.left != 0 || c.right != 0 || c.top != 0 || c.bottom != 0 then
@@ -224,7 +222,7 @@ class VobSubStream < Stream
   def mux
     path = "%s\\\VTS_%02d-fix.IDX" % [@track.tempdir, @track.vts]
     x = @sub_streams.zip(0...@sub_streams.length)
-    arg = x.inject("") { |s, a| s + ' ' + a[0].mux(a[1]) }
+    arg = x.map { |a| a[0].mux(a[1]) }.join(' ')
     arg + " -s %s -D -A -T \"%s\"" % [(0...@sub_streams.length).to_a.join(','), path]
   end
 
@@ -237,7 +235,7 @@ private
       f.puts "%s\\VTS_%02d" % [@track.tempdir, @track.vts]
       f.puts @track.pgc
       f.puts 0
-      f.puts @sub_streams.inject("") { |acc, s| acc + "#{s.id} " }
+      f.puts @sub_streams.map { |s| "#{s.id}" }.join(' ')
       f.puts 'CLOSE'
       end
       
@@ -271,14 +269,12 @@ private
       end
     end
 
-    File.open("%s\\VTS_%02d.IDX" % [@track.tempdir, @track.vts], "r") do |fr|
-      File.open("%s\\VTS_%02d-fix.IDX" % [@track.tempdir, @track.vts], "w") do |fw|
-        while line = fr.gets
-          fw.puts line
-          if line =~ /index: (\d+)/ then
-            id = $1.to_i
-            fw.puts "delay: %s" % delays[id]
-          end
+    File.open("%s\\VTS_%02d-fix.IDX" % [@track.tempdir, @track.vts], "w") do |fw|
+      File.foreach("%s\\VTS_%02d.IDX" % [@track.tempdir, @track.vts]) do |line|
+        fw.puts line
+        if line =~ /index: (\d+)/ then
+          id = $1.to_i
+          fw.puts "delay: %s" % delays[id]
         end
       end
     end
@@ -338,45 +334,38 @@ class Track
     sub_streams = []
     sub_index = 0
     max_channels = 0
-    stream_file = File.open("%s\\VTS_%02d - Stream Information.txt" % [@tempdir, @vts], 'r') do |file|
-      while line = file.gets
-        s = nil
-        id, type, info = line.split(' - ', 3)
-        case type
-        when "Subtitle"
-          info =~ /(\w+)/
-          language = $1
-          t = @sub_streams.find { |t| t.language == language }
-          sub_streams << SubtitleStream.new(self, sub_index, info, t) if t
-          sub_index += 1
-        when "Audio"
-          info = info.split(' / ', 8)
-          codec = info[0]
-          channels = info[1]
-          channels =~ /(\d+)ch/
-          channels = $1.to_i
-          max_channels = channels if channels > max_channels
-          language = info[4]
-          if codec == 'AC3' then
-            t = @audio_streams.find { |t| t.language == language }
-            aud_streams << AudioStream.new(self, id, channels, info, t) if t
-          end
-        when "Video"
-          info = info.split(' / ', 7)
-          dar = info[2]
-          @video_stream.set_dar(dar)
-          s = VideoStream.new(self, id, info, @video_stream)
-          @streams << s
+    File.foreach("%s\\VTS_%02d - Stream Information.txt" % [@tempdir, @vts]) do |line|
+      s = nil
+      id, type, info = line.split(' - ', 3)
+      case type
+      when "Subtitle"
+        info =~ /(\w+)/
+        language = $1
+        t = @sub_streams.find { |t| t.language == language }
+        sub_streams << SubtitleStream.new(self, sub_index, info, t) if t
+        sub_index += 1
+      when "Audio"
+        info = info.split(' / ', 8)
+        codec = info[0]
+        channels = info[1]
+        channels =~ /(\d+)ch/
+        channels = $1.to_i
+        max_channels = channels if channels > max_channels
+        language = info[4]
+        if codec == 'AC3' then
+          t = @audio_streams.find { |t| t.language == language }
+          aud_streams << AudioStream.new(self, id, channels, info, t) if t
         end
+      when "Video"
+        info = info.split(' / ', 7)
+        dar = info[2]
+        @video_stream.set_dar(dar)
+        s = VideoStream.new(self, id, info, @video_stream)
+        @streams << s
       end
     end
 
-    aud_streams = aud_streams.reduce([]) do |acc, s| 
-      acc << s if s.channels >= max_channels
-      acc
-    end
-    
-    @streams = @streams.concat(aud_streams)
+    @streams = @streams.concat(aud_streams.delete_if { |s| s.channels < max_channels })
     @streams << VobSubStream.new(self, sub_streams) if sub_streams.length != 0
     @streams << ChapterStream.new(self, "%s\\VTS_%02d - Chapter Information - OGG.txt" % [@tempdir, @vts])
   end
@@ -396,7 +385,7 @@ class Track
   def mux
     puts "Remuxing"
     path = "%s\\%s.mkv" % [@outdir, @name]
-    mux_cmd = "\"%s\" -o \"%s\"" % [$mkvmergePath, path] + @streams.reduce("") { |arg, s| arg + ' ' + s.mux }
+    mux_cmd = "\"%s\" -o \"%s\" " % [$mkvmergePath, path] + @streams.map { |s| s.mux }.join(' ')
     %x{#{mux_cmd}}
   end
 end
@@ -429,7 +418,7 @@ begin
   project = YAML::load(File.read('dvdrip.yaml'))
   tracks = []
   outdir = project["outdir"]
-  if project["crop"] != nil then
+  if !project["crop"].nil? then
     c = Crop.new(project["crop"]["left"], project["crop"]["top"], project["crop"]["right"], project["crop"]["bottom"])
   end
   video_stream = Video.new(c, project["bitrate"])
