@@ -96,7 +96,7 @@ Ex of one disk
     - A Sympathetic Crotch To Cry On
 
 For each disk, you have to specify:
-* the image name
+* the image name - it's either the path of an ISO file or a single drive letter
 * the template for the output file name. See below
 * the list of tracks. See below
 

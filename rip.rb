@@ -69,20 +69,47 @@ class Sub
 end
 
 class Disk
-  attr_accessor :image, :ord
+  attr_reader :image, :ord, :drive_letter
   def initialize(image, ord)
     @image = image
+    if @image =~ /\.ISO$/i then
+      @is_image = true
+      @drive_letter =  $clonedriveLetter
+    else
+      @is_image = false
+      @drive_letter = @image
+    end
     @ord = ord
   end
   
   def mount
-    if $last_mounted != @image then
+    if @is_image && $last_mounted != @image then
       puts "Mounting image file %s" % @image
       mount_cmd = "\"%s\" -mount %d,\"%s\"" % [$clonedrivePath, $clonedriveIndex, @image]
       %x{#{mount_cmd}}
       sleep 10
       $last_mounted = @image
     end
+  end
+
+  def parse_vmg
+    puts "Parsing Video Manager IFO"
+    path = "%s:\\VIDEO_TS\\VIDEO_TS.IFO" % @drive_letter
+    title_map = []
+    File::open(path, 'r') do |f|
+      x = f.read(256)
+      offset_of_srpt = x[0xC4...0xC8].unpack('N').first
+      f.seek(offset_of_srpt * 0x800)
+      x = f.read(512)
+      titles = x[0...2].unpack('n').first
+      offset = 8
+      (1..titles).each do |i| 
+        a = x.slice(offset, 12).unpack("ccnnccN")
+        title_map[i] = { "vts" => a[4], "pgc" => a[5] }
+        offset += 12
+      end
+    end
+    title_map
   end
 end
 
@@ -323,7 +350,7 @@ class Track
   def decrypt
     puts "Decrypting"
     decrypt_cmd = "\"%s\" /SRC %s: /DEST \"%s\" /VTS %d /PGC %d /MODE IFO /START /CLOSE" % 
-    [$decrypterPath, $clonedriveLetter, @tempdir, @vts, @pgc]
+    [$decrypterPath, @disk.drive_letter, @tempdir, @vts, @pgc]
     %x{#{decrypt_cmd}}
   end
   
@@ -390,26 +417,6 @@ class Track
   end
 end
 
-def parse_vmg
-  puts "Parsing Video Manager IFO"
-  path = "%s:\\VIDEO_TS\\VIDEO_TS.IFO" % $clonedriveLetter
-  title_map = []
-  File::open(path, 'r') do |f|
-    x = f.read(256)
-    offset_of_srpt = x[0xC4...0xC8].unpack('N').first
-    f.seek(offset_of_srpt * 0x800)
-    x = f.read(512)
-    titles = x[0...2].unpack('n').first
-    offset = 8
-    (1..titles).each do |i| 
-      a = x.slice(offset, 12).unpack("ccnnccN")
-      title_map[i] = { "vts" => a[4], "pgc" => a[5] }
-      offset += 12
-    end
-  end
-  title_map
-end
-
 TrackDoneFileName = 'tracks-done.yaml'
 tracks_done = File.exist?(TrackDoneFileName) ? YAML::load(File.read(TrackDoneFileName)) : {}
 
@@ -427,7 +434,7 @@ begin
   project["disk"].each_with_index do |d, i|
     disk = Disk.new(d["image"], i + 1)
     disk.mount
-    title_map = parse_vmg
+    title_map = disk.parse_vmg
     format_name = d["name"] || '#{name}'
     d["tracks"].each do |t|
       title = t["title"] || 1
