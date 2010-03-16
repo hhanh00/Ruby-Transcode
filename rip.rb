@@ -421,31 +421,46 @@ def parse_vmg
   title_map
 end
 
-tracks = []
-outdir = project["outdir"]
-if project["crop"] != nil then
-  c = Crop.new(project["crop"]["left"], project["crop"]["top"], project["crop"]["right"], project["crop"]["bottom"])
-end
-video_stream = Video.new(c, project["bitrate"])
-audio_streams = project["audio"].map { |lang| Audio.new(lang) }
-sub_streams = project["sub"].map { |lang| Sub.new(lang) }
-project["disk"].each_with_index do |d, i|
-  disk = Disk.new(d["image"], i + 1)
-  disk.mount
-  title_map = parse_vmg
-  format_name = d["name"]
-  d["tracks"].each do |t|
-    title = t["title"]
-    episode = t["episode"]
-    t["track"].each do |name|
-      vts = title_map[title]["vts"]
-      pgc = title_map[title]["pgc"]
-      track_name = eval "\"#{format_name}\""
-      title += 1
-      episode += 1
-      tracks << Track.new(outdir, vts, pgc, track_name, disk, video_stream, audio_streams, sub_streams)
+TrackDoneFileName = 'tracks-done.yaml'
+tracks_done = File.exist?(TrackDoneFileName) ? YAML::load(File.read(TrackDoneFileName)) : {}
+
+begin 
+  more_work = false
+  project = YAML::load(File.read('dvdrip.yaml'))
+  tracks = []
+  outdir = project["outdir"]
+  if project["crop"] != nil then
+    c = Crop.new(project["crop"]["left"], project["crop"]["top"], project["crop"]["right"], project["crop"]["bottom"])
+  end
+  video_stream = Video.new(c, project["bitrate"])
+  audio_streams = project["audio"].map { |lang| Audio.new(lang) }
+  sub_streams = project["sub"].map { |lang| Sub.new(lang) }
+  project["disk"].each_with_index do |d, i|
+    disk = Disk.new(d["image"], i + 1)
+    disk.mount
+    title_map = parse_vmg
+    format_name = d["name"] || '#{name}'
+    d["tracks"].each do |t|
+      title = t["title"] || 1
+      episode = t["episode"] || 1
+      t["track"].each do |name|
+        vts = title_map[title]["vts"]
+        pgc = title_map[title]["pgc"]
+        track_name = eval "\"#{format_name}\""
+        title += 1
+        episode += 1
+        if !tracks_done.has_key?(track_name) then
+          tracks << Track.new(outdir, vts, pgc, track_name, disk, video_stream, audio_streams, sub_streams) 
+          more_work = true
+        end
+      end
     end
   end
-end
+  tracks.each do |t| 
+    t.run
+    tracks_done[t.name] = true
+  end
 
-tracks.each { |t| t.run }
+  File.open(TrackDoneFileName, 'w') { |f| f.puts YAML::dump(tracks_done) }
+end while more_work
+
