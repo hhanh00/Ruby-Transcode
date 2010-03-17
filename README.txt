@@ -31,6 +31,8 @@ It will:
   - decrypt the movie title(s) with DVD Decrypter,
   - demux the streams with DGIndex,
   - select the best audio stream of your choice of language,
+  - autocrop the borders
+  - calculate the bitrate
   - reencode the video with X264 with one of the presets,
   - rip the subtitles with VobSub and correct the timecodes
   - and finally remux everything into a Matroska file in MKVMerge.
