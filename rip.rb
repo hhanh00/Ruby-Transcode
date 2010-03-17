@@ -135,13 +135,21 @@ class AudioStream < Stream
     @audio_filename = Dir.foreach(@track.tempdir).find { |f| f =~ /#{track_number}/ }
     @audio_filename =~ /DELAY (.*)ms/
     @delay = $1.to_i
+    @path = "%s\\%s" % [@track.tempdir, @audio_filename]
   end
   
   def mux
-    path = "%s\\%s" % [@track.tempdir, @audio_filename]
     "--language 0:%s " % @stream.language +
     "--sync 0:%d " % @delay +
-    "-D -a 0 -S -T \"%s\"" % path
+    "-D -a 0 -S -T \"%s\"" % @path
+  end
+  
+  def encode
+    @track.size -= size unless @track.size.nil?
+  end
+  
+  def size
+    File.size(@path)
   end
 end
 
@@ -154,6 +162,7 @@ class VideoStream < Stream
     precrop_avs
     autocrop
     avs
+    autobitrate
     encode1
     encode2
   end
@@ -182,9 +191,9 @@ EOS
   def autocrop
     if @track.video_stream.autocrop then
       path_precrop_avs = "%s\\VTS_%02d-precrop.avs" % [@track.tempdir, @track.vts]
-      ac = WIN32OLE.new('autocroplib.AutoCrop')
-      ac.GetAutoCropValues(path_precrop_avs)
-      c = Crop.new(ac.left, ac.top, ac.right, ac.bottom)
+      @ac = WIN32OLE.new('autocroplib.AutoCrop')
+      @ac.GetAutoCropValues(path_precrop_avs)
+      c = Crop.new(@ac.left, @ac.top, @ac.right, @ac.bottom)
       puts 'Autocrop to %s' % c
       @track.video_stream.crop = c
     end
@@ -204,13 +213,23 @@ EOS
     end
   end
   
+  def autobitrate
+    if @track.video_stream.bitrate.nil?
+      duration = @ac.frameCount / 24
+      @bitrate = @track.size / duration * 8 / 1000
+    else
+      @bitrate = @track.video_stream.bitrate
+    end
+    puts "Video bitrate = %d" % @bitrate
+  end
+  
   def encode1
     puts "Video encoding - pass 1"
     path = "%s\\VTS_%02d" % [@track.tempdir, @track.vts]
     x = <<EOS
 \"%s\\tools\\x264\\x264.exe\" --profile high --sar %d:%d --preset %s --tune film --pass 1 --bitrate %d --stats "%s.stats" --thread-input --output NUL "%s.avs" 
 EOS
-    x264_cmd1 = x % [$meguiPath, @track.video_stream.dx, @track.video_stream.dy, $x264preset, @track.video_stream.bitrate, path, path]
+    x264_cmd1 = x % [$meguiPath, @track.video_stream.dx, @track.video_stream.dy, $x264preset, @bitrate, path, path]
     %x{#{x264_cmd1}}
   end
 
@@ -220,7 +239,7 @@ EOS
     x = <<EOS
 \"%s\\tools\\x264\\x264.exe\" --profile high --sar %d:%d --preset %s --tune film --pass 2 --bitrate %d --stats "%s.stats" --thread-input --aud --output "%s.264" "%s.avs" 
 EOS
-    x264_cmd2 = x % [$meguiPath, @track.video_stream.dx, @track.video_stream.dy, $x264preset, @track.video_stream.bitrate, path, path, path]
+    x264_cmd2 = x % [$meguiPath, @track.video_stream.dx, @track.video_stream.dy, $x264preset, @bitrate, path, path, path]
     %x{#{x264_cmd2}}
   end
 end
@@ -244,6 +263,12 @@ class VobSubStream < Stream
   def encode
     vobsubrip
     timecorrect
+    @track.size -= size unless @track.size.nil?
+  end
+  
+  def size
+    path = "%s\\\VTS_%02d-fix.SUB" % [@track.tempdir, @track.vts]
+    File.size(path)
   end
   
   def mux
@@ -324,8 +349,9 @@ end
 
 class Track
   attr_reader :tempdir, :vts, :pgc, :name, :video_stream, :audio_streams, :sub_streams
+  attr_accessor :size
   
-  def initialize(outdir, vts, pgc, name, disk, video_stream, audio_streams, sub_streams)
+  def initialize(outdir, size, vts, pgc, name, disk, video_stream, audio_streams, sub_streams)
     @outdir = outdir
     @vts = vts
     @pgc = pgc
@@ -334,6 +360,7 @@ class Track
     @video_stream = video_stream
     @audio_streams = audio_streams
     @sub_streams = sub_streams
+    @size = size && size * 1024 * 1024
     @tempdir = "%s\\%d.%d.%d" % [$tempdir, @disk.ord, @vts, @pgc]
   end
   
@@ -361,6 +388,7 @@ class Track
     sub_streams = []
     sub_index = 0
     max_channels = 0
+    video = nil
     File.foreach("%s\\VTS_%02d - Stream Information.txt" % [@tempdir, @vts]) do |line|
       s = nil
       id, type, info = line.split(' - ', 3)
@@ -387,13 +415,13 @@ class Track
         info = info.split(' / ', 7)
         dar = info[2]
         @video_stream.set_dar(dar)
-        s = VideoStream.new(self, id, info, @video_stream)
-        @streams << s
+        video = VideoStream.new(self, id, info, @video_stream)
       end
     end
 
-    @streams = @streams.concat(aud_streams.delete_if { |s| s.channels < max_channels })
+    @streams = aud_streams.delete_if { |s| s.channels < max_channels }
     @streams << VobSubStream.new(self, sub_streams) if sub_streams.length != 0
+    @streams << video
     @streams << ChapterStream.new(self, "%s\\VTS_%02d - Chapter Information - OGG.txt" % [@tempdir, @vts])
   end
   
@@ -446,7 +474,7 @@ begin
         title += 1
         episode += 1
         if !tracks_done.has_key?(track_name) then
-          tracks << Track.new(outdir, vts, pgc, track_name, disk, video_stream, audio_streams, sub_streams) 
+          tracks << Track.new(outdir, project["size"], vts, pgc, track_name, disk, video_stream, audio_streams, sub_streams) 
           more_work = true
         end
       end

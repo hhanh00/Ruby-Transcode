@@ -67,6 +67,10 @@ This is where the output files go.
 bitrate: 1200
 This is the bitrate of the video stream after reencoding.
 
+size: 1400
+This is the target file size in MB for each track. Either bitrate or size must be
+specified. bitrate takes precedence over size.
+
 x264preset: slower
 This is the quality preset in x264.
 
@@ -115,6 +119,12 @@ track list.
 
 If your DVD does not have episodes that follow a sequence of titles, you need
 to specify several track groups. The 'tracks' entry is itself a list.
+
+Default values
+--------------
+* name defaults to {#name}
+* episode defaults to 1
+* title defaults to 1
 
 The configuration file ends with the --- marker.
 The rest of the file is not processed.
