@@ -2,37 +2,27 @@
 x264preset: slower
 clonedrive:
   path: C:\Program Files\Elaborate Bytes\VirtualCloneDrive\Daemon.exe
-  letter: K
+  letter: F
   index: 0
 decrypter: C:\Program Files\DVD Decrypter\DVDDecrypter.exe
 mkvmerge: C:\Program Files\MKVtoolnix\mkvmerge.exe
 megui: C:\Program Files\megui
 tempdir: D:\TEMPRIP
-outdir: e:\two
+outdir: d:\HD
 bitrate: 1200
 audio:
 - English
 sub:
 - English
 disk:
-- image: e:\TWO_AND_A_HALF_MEN_SEASON_2_D3.iso
-  name: "Two and a Half Men - S02E#{'%02d' % episode} - #{name}"
+- image: d:\dvd\TAKING_OF_PELHAM_ONE_TWO_THREE.iso
   tracks:
-  - title: 6
-    episode: 19
-    track:
-    - A Low, Guttural Tongue-Flapping Noise
-    - I Always Wanted A Shaved Monkey
-    - A Sympathetic Crotch To Cry On
-- image: e:\TWO_AND_A_HALF_MEN_SEASON_2_D4.iso
-  name: "Two and a Half Men - S02E#{'%02d' % episode} - #{name}"
+  - track:
+    - The Taking of Pelham 123
+- image: d:\dvd\ALFIE_16X9.iso
   tracks:
-  - title: 2
-    episode: 22
-    track:
-    - That Old Hose Bag Is My Mother
-    - Squab, Squab, Squab, Squab, Squab
-    - Does This Smell Funny To You
+  - track:
+    - Alfie
 ---
 x264preset: ultrafast
 clonedrive:

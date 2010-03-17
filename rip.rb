@@ -420,9 +420,10 @@ end
 TrackDoneFileName = 'tracks-done.yaml'
 tracks_done = File.exist?(TrackDoneFileName) ? YAML::load(File.read(TrackDoneFileName)) : {}
 
+disk_index = 0
 begin 
   more_work = false
-  project = YAML::load(File.read('dvdrip.yaml'))
+  project = YAML::load_file('dvdrip.yaml')
   tracks = []
   outdir = project["outdir"]
   if !project["crop"].nil? then
@@ -431,8 +432,9 @@ begin
   video_stream = Video.new(c, project["bitrate"])
   audio_streams = project["audio"].map { |lang| Audio.new(lang) }
   sub_streams = project["sub"].map { |lang| Sub.new(lang) }
-  project["disk"].each_with_index do |d, i|
-    disk = Disk.new(d["image"], i + 1)
+  project["disk"].each |d|
+	disk_index += 1
+    disk = Disk.new(d["image"], disk_index)
     disk.mount
     title_map = disk.parse_vmg
     format_name = d["name"] || '#{name}'
@@ -457,6 +459,6 @@ begin
     tracks_done[t.name] = true
   end
 
-  File.open(TrackDoneFileName, 'w') { |f| f.puts YAML::dump(tracks_done) }
+  File.open(TrackDoneFileName, 'w') { |f| YAML::dump(tracks_done, f) }
 end while more_work
 
