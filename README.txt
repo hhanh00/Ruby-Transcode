@@ -121,6 +121,7 @@ Ex of one disk
   tracks:
   - title: 6
     episode: 19
+    type: film
     track:
     - A Low, Guttural Tongue-Flapping Noise
     - I Always Wanted A Shaved Monkey
@@ -146,6 +147,12 @@ track list.
 
 If your DVD does not have episodes that follow a sequence of titles, you need
 to specify several track groups. The 'tracks' entry is itself a list.
+
+Optionally, you can indicate the video type. It is one of the following values:
+- film (default - IVTC 24fps)
+- progressive: 30 fps no deinterlacing
+- interlaced: 30 fps with deinterlacing
+By default, the video is considered film.
 
 Default values
 --------------
@@ -194,3 +201,6 @@ disk:
     - A Lungful Of Alan
     - Zejdz Z Moich Wlosów (Get Off My Hair)
     - Those Big Pink Things With Coconut
+
+TODO:
+  - Support for non NTSC dvds

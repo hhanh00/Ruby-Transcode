@@ -169,7 +169,7 @@ class VideoStream < Stream
   
   def mux
     path = "%s\\VTS_%02d.264" % [@track.tempdir, @track.vts]
-    "--default-duration 0:24000/1001fps " +
+    "--default-duration 0:%d" % @track.fps + "000/1001fps " +
     "-d 0 -A -S -T \"%s\"" % path
   end
   
@@ -185,6 +185,10 @@ ColorMatrix(hints=true, threads=0)
 EOS
     avs_file = File.open(path + '-precrop.avs', 'w') do |file|
       file.puts x % [$meguiPath, path, $meguiPath]
+      if @track.interlaced then
+        file.puts "Load_Stdcall_Plugin(\"%s\\tools\\yadif\\yadif.dll\")" % $meguiPath
+        file.puts "Yadif(order=-1)"
+      end
     end
   end
   
@@ -215,7 +219,7 @@ EOS
   
   def autobitrate
     if @track.video_stream.bitrate.nil?
-      duration = @ac.frameCount / 24
+      duration = @ac.frameCount / @track.fps
       @bitrate = @track.size / duration * 8 / 1000
     else
       @bitrate = @track.video_stream.bitrate
@@ -348,11 +352,13 @@ class ChapterStream < Stream
 end
 
 class Track
-  attr_reader :tempdir, :vts, :pgc, :name, :video_stream, :audio_streams, :sub_streams
+  attr_reader :type, :tempdir, :vts, :pgc, :name, :video_stream, :audio_streams, :sub_streams,
+    :fps, :ivtc, :interlaced
   attr_accessor :size
   
-  def initialize(outdir, size, vts, pgc, name, disk, video_stream, audio_streams, sub_streams)
+  def initialize(outdir, type, size, vts, pgc, name, disk, video_stream, audio_streams, sub_streams)
     @outdir = outdir
+    @type = type
     @vts = vts
     @pgc = pgc
     @name = name
@@ -362,6 +368,20 @@ class Track
     @sub_streams = sub_streams
     @size = size && size * 1024 * 1024
     @tempdir = "%s\\%d.%d.%d" % [$tempdir, @disk.ord, @vts, @pgc]
+    case @type
+      when "film"
+        @fps = 24
+        @ivtc = true
+        @interlaced = false
+      when "progressive"
+        @fps = 30
+        @ivtc = false
+        @interlaced = false
+      when "interlaced"
+        @fps = 30
+        @ivtc = false
+        @interlaced = true
+    end
   end
   
   def run
@@ -432,8 +452,8 @@ class Track
   def demux
     puts "Demuxing"
     path = "%s\\VTS_%02d_1" % [@tempdir, @vts]
-    demux_cmd = "\"%s\" -i \"%s.VOB\" -o \"%s\" -fo 1 -exit" %
-    [$demuxPath, path, path]
+    demux_cmd = "\"%s\" -i \"%s.VOB\" -o \"%s\" -fo %d -exit" %
+    [$demuxPath, path, path, @ivtc ? 1 : 0]
     %x{#{demux_cmd}}
   end
   
@@ -446,10 +466,10 @@ class Track
 end
 
 TrackDoneFileName = 'tracks-done.yaml'
-tracks_done = File.exist?(TrackDoneFileName) ? YAML::load(File.read(TrackDoneFileName)) : {}
 
 disk_index = 0
 begin 
+  tracks_done = File.exist?(TrackDoneFileName) ? YAML::load(File.read(TrackDoneFileName)) : {}
   more_work = false
   project = YAML::load_file('dvdrip.yaml')
   tracks = []
@@ -460,8 +480,8 @@ begin
   video_stream = Video.new(c, project["bitrate"])
   audio_streams = project["audio"].map { |lang| Audio.new(lang) }
   sub_streams = project["sub"].map { |lang| Sub.new(lang) }
-  project["disk"].each |d|
-	disk_index += 1
+  project["disk"].each do |d| 
+    disk_index += 1
     disk = Disk.new(d["image"], disk_index)
     disk.mount
     title_map = disk.parse_vmg
@@ -469,6 +489,7 @@ begin
     d["tracks"].each do |t|
       title = t["title"] || 1
       episode = t["episode"] || 1
+      type = t["type"] || "film"
       t["track"].each do |name|
         vts = title_map[title]["vts"]
         pgc = title_map[title]["pgc"]
@@ -476,7 +497,7 @@ begin
         title += 1
         episode += 1
         if !tracks_done.has_key?(track_name) then
-          tracks << Track.new(outdir, project["size"], vts, pgc, track_name, disk, video_stream, audio_streams, sub_streams) 
+          tracks << Track.new(outdir, type, project["size"], vts, pgc, track_name, disk, video_stream, audio_streams, sub_streams) 
           more_work = true
         end
       end
@@ -485,8 +506,8 @@ begin
   tracks.each do |t| 
     t.run
     tracks_done[t.name] = true
+    File.open(TrackDoneFileName, 'w') { |f| YAML::dump(tracks_done, f) }
   end
 
-  File.open(TrackDoneFileName, 'w') { |f| YAML::dump(tracks_done, f) }
 end while more_work
 
