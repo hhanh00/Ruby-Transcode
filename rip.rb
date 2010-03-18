@@ -84,8 +84,8 @@ class Disk
   
   def mount
     if @is_image && $last_mounted != @image then
-      puts "Mounting image file %s" % @image
-      mount_cmd = "\"%s\" -mount %d,\"%s\"" % [$clonedrivePath, $clonedriveIndex, @image]
+      puts "Mounting image file #{@image}"
+      mount_cmd = "\"#{$clonedrivePath}\" -mount #{$clonedriveIndex},\"#{@image}\""
       %x{#{mount_cmd}}
       sleep 10
       $last_mounted = @image
@@ -94,7 +94,7 @@ class Disk
 
   def parse_vmg
     puts "Parsing Video Manager IFO"
-    path = "%s:\\VIDEO_TS\\VIDEO_TS.IFO" % @drive_letter
+    path = "#{@drive_letter}:\\VIDEO_TS\\VIDEO_TS.IFO"
     title_map = []
     File::open(path, 'r') do |f|
       x = f.read(256)
@@ -135,13 +135,13 @@ class AudioStream < Stream
     @audio_filename = Dir.foreach(@track.tempdir).find { |f| f =~ /#{track_number}/ }
     @audio_filename =~ /DELAY (.*)ms/
     @delay = $1.to_i
-    @path = "%s\\%s" % [@track.tempdir, @audio_filename]
+    @path = "#{@track.tempdir}\\#{@audio_filename}"
   end
   
   def mux
-    "--language 0:%s " % @stream.language +
-    "--sync 0:%d " % @delay +
-    "-D -a 0 -S -T \"%s\"" % @path
+    "--language 0:#{@stream.language} " +
+    "--sync 0:#{@delay} " +
+    "-D -a 0 -S -T \"#{@path}\""
   end
   
   def encode
@@ -168,25 +168,25 @@ class VideoStream < Stream
   end
   
   def mux
-    path = "%s\\VTS_%02d.264" % [@track.tempdir, @track.vts]
-    "--default-duration 0:%d" % @track.fps + "000/1001fps " +
-    "-d 0 -A -S -T \"%s\"" % path
+    path = "#{@track.tempdir}\\VTS_#{'%02d' % @track.vts}.264"
+    "--default-duration 0:#{@track.fps}000/1001fps " +
+    "-d 0 -A -S -T \"#{path}\""
   end
   
 private
   def precrop_avs
-    path = "%s\\VTS_%02d" % [@track.tempdir, @track.vts]
+    path = "#{@track.tempdir}\\VTS_#{'%02d' % @track.vts}"
     c = @track.video_stream.crop
     x = <<EOS
-LoadPlugin("%s\\tools\\dgindex\\DGDecode.dll")
-DGDecode_mpeg2source("%s_1.d2v", info=3)
-LoadPlugin("%s\\tools\\avisynth_plugin\\ColorMatrix.dll")
+LoadPlugin("#{$meguiPath}\\tools\\dgindex\\DGDecode.dll")
+DGDecode_mpeg2source("#{path}_1.d2v", info=3)
+LoadPlugin("#{$meguiPath}\\tools\\avisynth_plugin\\ColorMatrix.dll")
 ColorMatrix(hints=true, threads=0)
 EOS
     avs_file = File.open(path + '-precrop.avs', 'w') do |file|
-      file.puts x % [$meguiPath, path, $meguiPath]
+      file.puts x
       if @track.interlaced then
-        file.puts "Load_Stdcall_Plugin(\"%s\\tools\\yadif\\yadif.dll\")" % $meguiPath
+        file.puts "Load_Stdcall_Plugin(\"#{$meguiPath}\\tools\\yadif\\yadif.dll\")"
         file.puts "Yadif(order=-1)"
       end
     end
@@ -194,25 +194,25 @@ EOS
   
   def autocrop
     if @track.video_stream.autocrop then
-      path_precrop_avs = "%s\\VTS_%02d-precrop.avs" % [@track.tempdir, @track.vts]
+      path_precrop_avs = "#{@track.tempdir}\\VTS_#{'%02d' % @track.vts}-precrop.avs"
       @ac = WIN32OLE.new('autocroplib.AutoCrop')
       @ac.GetAutoCropValues(path_precrop_avs)
       c = Crop.new(@ac.left, @ac.top, @ac.right, @ac.bottom)
-      puts 'Autocrop to %s' % c
+      puts "Autocrop to #{c}"
       @track.video_stream.crop = c
     end
   end
     
   def avs
-    path_precrop_avs = "%s\\VTS_%02d-precrop.avs" % [@track.tempdir, @track.vts]
-    path_avs = "%s\\VTS_%02d.avs" % [@track.tempdir, @track.vts]
+    path_precrop_avs = "#{@track.tempdir}\\VTS_#{'%02d' % @track.vts}-precrop.avs"
+    path_avs = "#{@track.tempdir}\\VTS_#{'%02d' % @track.vts}.avs"
     File.open(path_avs, 'w') do |w|
       File.foreach(path_precrop_avs) do |line|
         w.puts line
       end
       c = @track.video_stream.crop
       if c.left != 0 || c.right != 0 || c.top != 0 || c.bottom != 0 then
-        w.puts "crop(%d, %d, -%d, -%d)" % [c.left, c.top, c.right, c.bottom]
+        w.puts "crop(#{c.left}, #{c.top}, -#{c.right}, -#{c.bottom})"
       end
     end
   end
@@ -229,21 +229,17 @@ EOS
   
   def encode1
     puts "Video encoding - pass 1"
-    path = "%s\\VTS_%02d" % [@track.tempdir, @track.vts]
-    x = <<EOS
-\"%s\\tools\\x264\\x264.exe\" --profile high --sar %d:%d --preset %s --tune film --pass 1 --bitrate %d --stats "%s.stats" --thread-input --output NUL "%s.avs" 
-EOS
-    x264_cmd1 = x % [$meguiPath, @track.video_stream.dx, @track.video_stream.dy, $x264preset, @bitrate, path, path]
+    path = "#{@track.tempdir}\\VTS_#{'%02d' % @track.vts}"
+    x264_cmd1 = "\"#{$meguiPath}\\tools\\x264\\x264.exe\" --profile high --sar #{@track.video_stream.dx}:#{@track.video_stream.dy} --preset #{$x264preset} " +
+    "--tune film --pass 1 --bitrate #{@bitrate} --stats \"#{path}.stats\" --thread-input --output NUL \"#{path}.avs\""
     %x{#{x264_cmd1}}
   end
 
   def encode2
     puts "Video encoding - pass 2"
     path = "%s\\VTS_%02d" % [@track.tempdir, @track.vts]
-    x = <<EOS
-\"%s\\tools\\x264\\x264.exe\" --profile high --sar %d:%d --preset %s --tune film --pass 2 --bitrate %d --stats "%s.stats" --thread-input --aud --output "%s.264" "%s.avs" 
-EOS
-    x264_cmd2 = x % [$meguiPath, @track.video_stream.dx, @track.video_stream.dy, $x264preset, @bitrate, path, path, path]
+    x264_cmd2 = "\"#{$meguiPath}\\tools\\x264\\x264.exe\" --profile high --sar #{@track.video_stream.dx}:#{@track.video_stream.dy} --preset #{$x264preset} " +
+    "--tune film --pass 2 --bitrate #{@bitrate} --stats \"#{path}.stats\" --thread-input --aud --output \"#{path}.264\" \"#{path}.avs\""
     %x{#{x264_cmd2}}
   end
 end
@@ -254,7 +250,7 @@ class SubtitleStream < Stream
   end
 
   def mux(index)
-    "--language %d:%s" % [index, @stream.language]
+    "--language #{index}:#{@stream.language}"
   end
 end
 
@@ -271,37 +267,38 @@ class VobSubStream < Stream
   end
   
   def size
-    path = "%s\\\VTS_%02d-fix.SUB" % [@track.tempdir, @track.vts]
+    path = "#{@track.tempdir}\\\VTS_#{'%02d' % @track.vts}-fix.SUB"
     File.size(path)
   end
   
   def mux
-    path = "%s\\\VTS_%02d-fix.IDX" % [@track.tempdir, @track.vts]
+    path = "#{@track.tempdir}\\\VTS_#{'%02d' % @track.vts}-fix.IDX"
     x = @sub_streams.zip(0...@sub_streams.length)
     arg = x.map { |a| a[0].mux(a[1]) }.join(' ')
-    arg + " -s %s -D -A -T \"%s\"" % [(0...@sub_streams.length).to_a.join(','), path]
+    arg + " -s #{(0...@sub_streams.length).to_a.join(',')} -D -A -T \"#{path}\""
   end
 
 private
   def vobsubrip
     puts "Extracting subtitles"
-    vobsub_param = "%s\\vobsub.txt" % @track.tempdir
+    vobsub_param = "#{@track.tempdir}\\vobsub.txt"
+    path = "#{@track.tempdir}\\VTS_#{'%02d' % @track.vts}"
     File.open(vobsub_param, 'w') do |f|
-      f.puts "%s\\VTS_%02d_0.IFO" % [@track.tempdir, @track.vts]
-      f.puts "%s\\VTS_%02d" % [@track.tempdir, @track.vts]
+      f.puts "#{path}_0.IFO"
+      f.puts "#{path}"
       f.puts @track.pgc
       f.puts 0
       f.puts @sub_streams.map { |s| "#{s.id}" }.join(' ')
       f.puts 'CLOSE'
       end
       
-    vobsub_cmd = "rundll32.exe vobsub.dll,Configure %s" % vobsub_param
+    vobsub_cmd = "rundll32.exe vobsub.dll,Configure #{vobsub_param}"
     %x{#{vobsub_cmd}}
   end
   
   def timecorrect
     delays = []
-    File.open("%s\\VTS_%02d.IDX" % [@track.tempdir, @track.vts], "r") do |f|
+    File.open("#{@track.tempdir}\\VTS_#{'%02d' % @track.vts}.IDX", "r") do |f|
       look_for_id = true
       id = -1
       ts = nil
@@ -318,25 +315,25 @@ private
           sign = delay <=> 0
           delay = delay.abs
           delay = Time.utc(2000) + delay
-          delay = (sign < 0 ? "-" : "" ) + "%s:%d" % [delay.strftime("%H:%M:%S"), delay.usec / 1000]
+          delay = (sign < 0 ? "-" : "" ) + "#{delay.strftime("%H:%M:%S")}:#{delay.usec / 1000}"
           delays[id] = delay
           look_for_id = true
         end
       end
     end
 
-    File.open("%s\\VTS_%02d-fix.IDX" % [@track.tempdir, @track.vts], "w") do |fw|
-      File.foreach("%s\\VTS_%02d.IDX" % [@track.tempdir, @track.vts]) do |line|
+    path = "#{@track.tempdir}\\VTS_#{'%02d' % @track.vts}"
+    File.open("#{path}-fix.IDX", "w") do |fw|
+      File.foreach("#{path}.IDX") do |line|
         fw.puts line
         if line =~ /index: (\d+)/ then
           id = $1.to_i
-          fw.puts "delay: %s" % delays[id]
+          fw.puts "delay: #{delays[id]}"
         end
       end
     end
     
-    FileUtils.cp "%s\\VTS_%02d.SUB" % [@track.tempdir, @track.vts],
-      "%s\\VTS_%02d-fix.SUB" % [@track.tempdir, @track.vts]
+    FileUtils.cp "#{path}.SUB", "#{path}-fix.SUB"
   end
 end
 
@@ -347,7 +344,7 @@ class ChapterStream < Stream
   end
   
   def mux
-    "--chapters \"%s\"" % @chapter_filename
+    "--chapters \"#{@chapter_filename}\""
   end
 end
 
@@ -367,7 +364,8 @@ class Track
     @audio_streams = audio_streams
     @sub_streams = sub_streams
     @size = size && size * 1024 * 1024
-    @tempdir = "%s\\%d.%d.%d" % [$tempdir, @disk.ord, @vts, @pgc]
+    @tempdir = "#{$tempdir}\\#{@disk.ord}.#{@vts}.#{@pgc}"
+    @path = "#{@tempdir}\\VTS_#{'%02d' % @vts}"
     case @type
       when "film"
         @fps = 24
@@ -385,7 +383,7 @@ class Track
   end
   
   def run
-    puts "Processing %s" % @name
+    puts "Processing #{@name}"
     @disk.mount
     decrypt
     demux
@@ -396,8 +394,7 @@ class Track
   
   def decrypt
     puts "Decrypting"
-    decrypt_cmd = "\"%s\" /SRC %s: /DEST \"%s\" /VTS %d /PGC %d /MODE IFO /START /CLOSE" % 
-    [$decrypterPath, @disk.drive_letter, @tempdir, @vts, @pgc]
+    decrypt_cmd = "\"#{$decrypterPath}\" /SRC #{@disk.drive_letter}: /DEST \"#{@tempdir}\" /VTS #{@vts} /PGC #{@pgc} /MODE IFO /START /CLOSE"
     %x{#{decrypt_cmd}}
   end
   
@@ -409,7 +406,7 @@ class Track
     sub_index = 0
     max_channels = 0
     video = nil
-    File.foreach("%s\\VTS_%02d - Stream Information.txt" % [@tempdir, @vts]) do |line|
+    File.foreach("#{@tempdir}\\VTS_#{'%02d' % @vts} - Stream Information.txt") do |line|
       s = nil
       id, type, info = line.split(' - ', 3)
       case type
@@ -442,7 +439,7 @@ class Track
     @streams = aud_streams.delete_if { |s| s.channels < max_channels }
     @streams << VobSubStream.new(self, sub_streams) if sub_streams.length != 0
     @streams << video
-    @streams << ChapterStream.new(self, "%s\\VTS_%02d - Chapter Information - OGG.txt" % [@tempdir, @vts])
+    @streams << ChapterStream.new(self, "#{@path} - Chapter Information - OGG.txt")
   end
   
   def encode
@@ -451,16 +448,15 @@ class Track
   
   def demux
     puts "Demuxing"
-    path = "%s\\VTS_%02d_1" % [@tempdir, @vts]
-    demux_cmd = "\"%s\" -i \"%s.VOB\" -o \"%s\" -fo %d -exit" %
-    [$demuxPath, path, path, @ivtc ? 1 : 0]
+    path = "#{@path}_1"
+    demux_cmd = "\"#{$demuxPath}\" -i \"#{path}.VOB\" -o \"#{path}\" -fo #{@ivtc ? 1 : 0} -exit"
     %x{#{demux_cmd}}
   end
   
   def mux
     puts "Remuxing"
-    path = "%s\\%s.mkv" % [@outdir, @name]
-    mux_cmd = "\"%s\" -o \"%s\" " % [$mkvmergePath, path] + @streams.map { |s| s.mux }.join(' ')
+    path = "#{@outdir}\\#{@name}.mkv"
+    mux_cmd = "\"#{$mkvmergePath}\" -o \"#{path}\" " + @streams.map { |s| s.mux }.join(' ')
     %x{#{mux_cmd}}
   end
 end
