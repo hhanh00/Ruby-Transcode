@@ -1,3 +1,58 @@
+x264preset: slower
+clonedrive:
+  path: C:\Program Files\Elaborate Bytes\VirtualCloneDrive\Daemon.exe
+  letter: K
+  index: 0
+decrypter: C:\Program Files\DVD Decrypter\DVDDecrypter.exe
+mkvmerge: C:\Program Files\MKVtoolnix\mkvmerge.exe
+megui: C:\Program Files\megui
+tempdir: D:\TEMPRIP
+outdir: d:\HD
+bitrate: 1200
+audio:
+- English
+sub:
+- English
+disk:
+- image: M:\TWO_AND_A_HALF_MEN_SEASON_3_D1.iso
+  name: "Two and a Half Men - S03E#{'%02d' % episode} - #{name}"
+  tracks:
+  - title: 2
+    episode: 1
+    track:
+    - Weekend in Bangkok with Two Olympic Gymnasts
+    - Principal Gallagher's Lesbian Lover
+    - Carpet Burns and a Bite Mark
+    - Your Dismissive Attitude Toward Boobs
+    - We Called it Mr. Pinky
+    - Hi, Mr. Horned One
+    - Sleep Tight, Puddin' Pop
+- image: M:\TWO_AND_A_HALF_MEN_SEASON_3_D2.iso
+  name: "Two and a Half Men - S03E#{'%02d' % episode} - #{name}"
+  tracks:
+  - title: 2
+    episode: 8
+    track:
+    - That Voodoo That I Do Do
+    - Madame and Her Special Friend
+    - Something Salted and Twisted
+    - Santa's Village of the Damned
+    - That Special Tug
+    - Humiliation is a Visual Medium
+    - Love Isn't Blind, It's Retarded
+- image: M:\TWO_AND_A_HALF_MEN_SEASON_3_D3.iso
+  name: "Two and a Half Men - S03E#{'%02d' % episode} - #{name}"
+  tracks:
+  - title: 2
+    episode: 15
+    track:
+    - My Tongue is Meat
+    - Ergo, the Booty Call
+    - The Unfortunate Little Schnauser
+    - The Spit-Covered Cobbler
+    - Golly Moses, She's a Muffin
+    - Always a Bridesmaid, Never a Burro
+    - And the Plot Moistens
 ---
 x264preset: slower
 clonedrive:
@@ -36,7 +91,7 @@ disk:
   tracks:
   - title: 2
     episode: 10
-    nonivtc: true
+    type: interlaced
     track:
     - Look Who's Talking
     - Chock
@@ -52,7 +107,7 @@ disk:
   tracks:
   - title: 2
     episode: 19
-    nonivtc: true
+    type: interlaced
     track:
     - Monster Rancher
     - "4:20"
