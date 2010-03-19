@@ -105,7 +105,7 @@ class Disk
       offset = 8
       (1..titles).each do |i| 
         a = x.slice(offset, 12).unpack("ccnnccN")
-        title_map[i] = { "vts" => a[4], "pgc" => a[5] }
+        title_map[i] = { :vts => a[4], :pgc => a[5] }
         offset += 12
       end
     end
@@ -487,8 +487,8 @@ begin
       episode = t["episode"] || 1
       type = t["type"] || "film"
       t["track"].each do |name|
-        vts = title_map[title]["vts"]
-        pgc = title_map[title]["pgc"]
+        vts = title_map[title][:vts]
+        pgc = title_map[title][:pgc]
         track_name = eval "\"#{format_name}\""
         title += 1
         episode += 1
