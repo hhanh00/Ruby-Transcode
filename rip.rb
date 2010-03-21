@@ -163,6 +163,7 @@ class VideoStream < Stream
     autocrop
     avs
     autobitrate
+    return if File.exist?("#{@track.tempdir}\\VTS_#{'%02d' % @track.vts}.264") 
     encode1
     encode2
   end
@@ -280,6 +281,7 @@ class VobSubStream < Stream
 
 private
   def vobsubrip
+    return if File.exist?("#{@track.tempdir}\\VTS_#{'%02d' % @track.vts}.idx") 
     puts "Extracting subtitles"
     vobsub_param = "#{@track.tempdir}\\vobsub.txt"
     path = "#{@track.tempdir}\\VTS_#{'%02d' % @track.vts}"
@@ -393,6 +395,7 @@ class Track
   end
   
   def decrypt
+    return if File.exist?("#{@tempdir}\\VTS_#{'%02d' % @vts}_0.IFO") 
     puts "Decrypting"
     decrypt_cmd = "\"#{$decrypterPath}\" /SRC #{@disk.drive_letter}: /DEST \"#{@tempdir}\" /VTS #{@vts} /PGC #{@pgc} /MODE IFO /START /CLOSE"
     %x{#{decrypt_cmd}}
@@ -447,6 +450,7 @@ class Track
   end
   
   def demux
+    return if File.exist?("#{@tempdir}\\VTS_#{'%02d' % @vts}_1.d2v") 
     puts "Demuxing"
     path = "#{@path}_1"
     demux_cmd = "\"#{$demuxPath}\" -i \"#{path}.VOB\" -o \"#{path}\" -fo #{@ivtc ? 1 : 0} -exit"
@@ -454,8 +458,9 @@ class Track
   end
   
   def mux
-    puts "Remuxing"
     path = "#{@outdir}\\#{@name}.mkv"
+    return if File.exist?(path)
+    puts "Remuxing"
     mux_cmd = "\"#{$mkvmergePath}\" -o \"#{path}\" " + @streams.map { |s| s.mux }.join(' ')
     %x{#{mux_cmd}}
   end
@@ -502,8 +507,8 @@ begin
     tracks = track_names.map { |t|
       Track.new(outdir, type, project["size"], title_map[t[:title]][:vts], title_map[t[:title]][:pgc], t[:name], 
         disk, video_stream, audio_streams, sub_streams) }
-
   end
+
   tracks.each do |t| 
     more_work = true
     t.run
@@ -512,4 +517,3 @@ begin
   end
 
 end while more_work
-
