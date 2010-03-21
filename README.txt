@@ -116,37 +116,25 @@ This is the list of the subtitle languages that you want to keep.
 disk:
 This is a list of the disks that you want the tool to process.
 Ex of one disk
-- image: e:\TWO_AND_A_HALF_MEN_SEASON_2_D3.iso
-  name: "Two and a Half Men - S02E#{'%02d' % episode} - #{name}"
+- image: E:\XFDISC1.iso
+  name: "X-Files"
+  season: 2
+  title: 1
+  episode: 1
   tracks:
-  - title: 6
-    episode: 19
-    type: film
-    track:
-    - A Low, Guttural Tongue-Flapping Noise
-    - I Always Wanted A Shaved Monkey
-    - A Sympathetic Crotch To Cry On
+  - Little Green Men
+  - The Host
+  - Blood
+  - Sleepless
 
 For each disk, you have to specify:
 * the image name - it's either the path of an ISO file or a single drive letter
-* the template for the output file name. See below
 * the list of tracks. See below
 
-The template for the output file name is a format string in Ruby.
-In this example: "Two and a Half Men - S02E#{'%02d' % episode} - #{name}",
-we used #{name} which will be replaced by the actual name of the track
-and #{'%02d' % episode} which uses an expression between { } that Ruby
-evaluates. The expression '%02d' % episode, writes out the episode number as
-a 2 digit integer with a leading 0 if needed. Any valid Ruby expression
-works here.
-
 The list of tracks is a collection of tracks that follows a sequence.
-In the example, we are saying that we want the DVD titles 6, 7, 8 and
-they match episode 19, 20, 21. The track names are given by the
+In the example, we are saying that we want the DVD titles 1, 2, 3, 4 and
+they match episode 1, 2, 3, 4. The track names are given by the
 track list. 
-
-If your DVD does not have episodes that follow a sequence of titles, you need
-to specify several track groups. The 'tracks' entry is itself a list.
 
 Optionally, you can indicate the video type. It is one of the following values:
 - film (default - IVTC 24fps)
@@ -157,8 +145,11 @@ By default, the video is considered film.
 Default values
 --------------
 * name defaults to {#name}
+* season defaults to 1
 * episode defaults to 1
 * title defaults to 1
+
+If there aren't any track, the DVD is a single movie dvd.
 
 The configuration file ends with the --- marker.
 The rest of the file is not processed.
@@ -193,14 +184,14 @@ sub:
 - English
 disk:
 - image: e:\TWO_AND_A_HALF_MEN_SEASON_2_D2.iso
-  name: "Two and a Half Men - S02E#{'%02d' % episode} - #{name}"
+  name: Two and a Half Men
+  season: 2
+  episode: 12
+  title: 6
   tracks:
-  - title: 6
-    episode: 12
-    track:
-    - A Lungful Of Alan
-    - Zejdz Z Moich Wlosów (Get Off My Hair)
-    - Those Big Pink Things With Coconut
+  - A Lungful Of Alan
+  - Zejdz Z Moich Wlosów (Get Off My Hair)
+  - Those Big Pink Things With Coconut
 
 TODO:
   - Support for non NTSC dvds
