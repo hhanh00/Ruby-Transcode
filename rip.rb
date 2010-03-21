@@ -481,25 +481,31 @@ begin
     disk = Disk.new(d["image"], disk_index)
     disk.mount
     title_map = disk.parse_vmg
-    format_name = d["name"] || '#{name}'
-    d["tracks"].each do |t|
-      title = t["title"] || 1
-      episode = t["episode"] || 1
-      type = t["type"] || "film"
-      t["track"].each do |name|
-        vts = title_map[title][:vts]
-        pgc = title_map[title][:pgc]
-        track_name = eval "\"#{format_name}\""
+    name = d["name"]
+    title = d["title"] || 1
+    season = d["season"] || 1
+    episode = d["episode"] || 1
+    type = d["type"] || "film"
+    track_names = []
+    if d["tracks"].nil? then
+      track_names << { :name => name, :title => title }
+    else
+      d["tracks"].each do |t|
+        track_name = "#{name} - S#{'%02d' % season}E#{'%02d' % episode} - #{t}"
         title += 1
         episode += 1
-        if !tracks_done.has_key?(track_name) then
-          tracks << Track.new(outdir, type, project["size"], vts, pgc, track_name, disk, video_stream, audio_streams, sub_streams) 
-          more_work = true
-        end
+        track_names << { :name => track_name, :title => title }
       end
     end
+    
+    track_names.delete_if { |t| tracks_done.has_key?(t[:name]) }
+    tracks = track_names.map { |t|
+      Track.new(outdir, type, project["size"], title_map[t[:title]][:vts], title_map[t[:title]][:pgc], t[:name], 
+        disk, video_stream, audio_streams, sub_streams) }
+
   end
   tracks.each do |t| 
+    more_work = true
     t.run
     tracks_done[t.name] = true
     File.open(TrackDoneFileName, 'w') { |f| YAML::dump(tracks_done, f) }
