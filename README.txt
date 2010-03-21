@@ -144,10 +144,10 @@ By default, the video is considered film.
 
 Default values
 --------------
-* name defaults to {#name}
 * season defaults to 1
 * episode defaults to 1
 * title defaults to 1
+* type defaults to film
 
 If there aren't any track, the DVD is a single movie dvd.
 
