@@ -163,9 +163,10 @@ class VideoStream < Stream
     autocrop
     avs
     autobitrate
-    return if File.exist?("#{@track.tempdir}\\VTS_#{'%02d' % @track.vts}.264") 
-    encode1
-    encode2
+    make_file ("#{@track.tempdir}\\VTS_#{'%02d' % @track.vts}.264") {
+      encode1
+      encode2
+    }
   end
   
   def mux
@@ -281,21 +282,22 @@ class VobSubStream < Stream
 
 private
   def vobsubrip
-    return if File.exist?("#{@track.tempdir}\\VTS_#{'%02d' % @track.vts}.idx") 
-    puts "Extracting subtitles"
-    vobsub_param = "#{@track.tempdir}\\vobsub.txt"
-    path = "#{@track.tempdir}\\VTS_#{'%02d' % @track.vts}"
-    File.open(vobsub_param, 'w') do |f|
-      f.puts "#{path}_0.IFO"
-      f.puts "#{path}"
-      f.puts @track.pgc
-      f.puts 0
-      f.puts @sub_streams.map { |s| "#{s.id}" }.join(' ')
-      f.puts 'CLOSE'
-      end
-      
-    vobsub_cmd = "rundll32.exe vobsub.dll,Configure #{vobsub_param}"
-    %x{#{vobsub_cmd}}
+    make_file("#{@track.tempdir}\\VTS_#{'%02d' % @track.vts}.idx") {
+      puts "Extracting subtitles"
+      vobsub_param = "#{@track.tempdir}\\vobsub.txt"
+      path = "#{@track.tempdir}\\VTS_#{'%02d' % @track.vts}"
+      File.open(vobsub_param, 'w') do |f|
+        f.puts "#{path}_0.IFO"
+        f.puts "#{path}"
+        f.puts @track.pgc
+        f.puts 0
+        f.puts @sub_streams.map { |s| "#{s.id}" }.join(' ')
+        f.puts 'CLOSE'
+        end
+        
+      vobsub_cmd = "rundll32.exe vobsub.dll,Configure #{vobsub_param}"
+      %x{#{vobsub_cmd}}
+    }
   end
   
   def timecorrect
@@ -395,10 +397,11 @@ class Track
   end
   
   def decrypt
-    return if File.exist?("#{@tempdir}\\VTS_#{'%02d' % @vts}_0.IFO") 
-    puts "Decrypting"
-    decrypt_cmd = "\"#{$decrypterPath}\" /SRC #{@disk.drive_letter}: /DEST \"#{@tempdir}\" /VTS #{@vts} /PGC #{@pgc} /MODE IFO /START /CLOSE"
-    %x{#{decrypt_cmd}}
+    make_file ("#{@tempdir}\\VTS_#{'%02d' % @vts}_0.IFO") {
+      puts "Decrypting"
+      decrypt_cmd = "\"#{$decrypterPath}\" /SRC #{@disk.drive_letter}: /DEST \"#{@tempdir}\" /VTS #{@vts} /PGC #{@pgc} /MODE IFO /START /CLOSE"
+      %x{#{decrypt_cmd}}
+    }
   end
   
   def parse_stream_file
@@ -450,19 +453,31 @@ class Track
   end
   
   def demux
-    return if File.exist?("#{@tempdir}\\VTS_#{'%02d' % @vts}_1.d2v") 
-    puts "Demuxing"
-    path = "#{@path}_1"
-    demux_cmd = "\"#{$demuxPath}\" -i \"#{path}.VOB\" -o \"#{path}\" -fo #{@ivtc ? 1 : 0} -exit"
-    %x{#{demux_cmd}}
+    make_file ("#{@tempdir}\\VTS_#{'%02d' % @vts}_1.d2v") {
+      puts "Demuxing"
+      path = "#{@path}_1"
+      demux_cmd = "\"#{$demuxPath}\" -i \"#{path}.VOB\" -o \"#{path}\" -fo #{@ivtc ? 1 : 0} -exit"
+      %x{#{demux_cmd}}
+    }
   end
   
   def mux
     path = "#{@outdir}\\#{@name}.mkv"
-    return if File.exist?(path)
-    puts "Remuxing"
-    mux_cmd = "\"#{$mkvmergePath}\" -o \"#{path}\" " + @streams.map { |s| s.mux }.join(' ')
-    %x{#{mux_cmd}}
+    make_file(path) {
+      puts "Remuxing"
+      mux_cmd = "\"#{$mkvmergePath}\" -o \"#{path}\" " + @streams.map { |s| s.mux }.join(' ')
+      %x{#{mux_cmd}}
+    }
+  end
+end
+
+def make_file(file)
+  return if File.exists?(file)
+  begin
+    yield
+  rescue Interrupt
+    File.unlink(file) if File.exists?(file)
+    raise $!
   end
 end
 
@@ -497,9 +512,9 @@ begin
     else
       d["tracks"].each do |t|
         track_name = "#{name} - S#{'%02d' % season}E#{'%02d' % episode} - #{t}"
+        track_names << { :name => track_name, :title => title }
         title += 1
         episode += 1
-        track_names << { :name => track_name, :title => title }
       end
     end
     
