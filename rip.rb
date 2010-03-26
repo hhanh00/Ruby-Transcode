@@ -484,10 +484,12 @@ end
 TrackDoneFileName = 'tracks-done.yaml'
 
 disk_index = 0
+shutdown = false
 begin 
   tracks_done = File.exist?(TrackDoneFileName) ? YAML::load(File.read(TrackDoneFileName)) : {}
   more_work = false
   project = YAML::load_file('dvdrip.yaml')
+  shutdown = project["shutdown"]
   tracks = []
   outdir = project["outdir"]
   if !project["crop"].nil? then
@@ -519,7 +521,7 @@ begin
     end
     
     track_names.delete_if { |t| tracks_done.has_key?(t[:name]) }
-    tracks = track_names.map { |t|
+    tracks += track_names.map { |t|
       Track.new(outdir, type, project["size"], title_map[t[:title]][:vts], title_map[t[:title]][:pgc], t[:name], 
         disk, video_stream, audio_streams, sub_streams) }
   end
@@ -532,3 +534,8 @@ begin
   end
 
 end while more_work
+if shutdown then
+  shutdown_cmd = "psshutdown -s"
+  %x{#{shutdown_cmd}}
+end
+
