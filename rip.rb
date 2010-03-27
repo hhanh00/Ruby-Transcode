@@ -163,6 +163,7 @@ class VideoStream < Stream
     autocrop
     avs
     autobitrate
+    qpfile
     make_file ("#{@track.tempdir}\\VTS_#{'%02d' % @track.vts}.264") {
       encode1
       encode2
@@ -229,11 +230,25 @@ EOS
     puts "Video bitrate = %d" % @bitrate
   end
   
+  def qpfile
+    ts_ref = Time.utc(2000)
+    path = "#{@track.tempdir}\\VTS_#{'%02d' % @track.vts} - Chapter Information - OGG - fix.txt"
+    File.open("#{@track.tempdir}\\qpfile.txt", "w") do |fw|
+      File.foreach(path) do |line|
+        if line =~ /(CHAPTER\d+)=(\d+):(\d+):(\d+)\.(\d+)/ then
+          ts = Time.utc(2000, 1, 1, $2.to_i, $3.to_i, $4.to_i, $5.to_i * 1000)
+          frame = ((ts - ts_ref) * @track.fps).to_i
+          fw.puts "#{frame} I -1"
+        end
+      end
+    end
+  end
+  
   def encode1
     puts "Video encoding - pass 1"
     path = "#{@track.tempdir}\\VTS_#{'%02d' % @track.vts}"
     x264_cmd1 = "\"#{$meguiPath}\\tools\\x264\\x264.exe\" --profile high --sar #{@track.video_stream.dx}:#{@track.video_stream.dy} --preset #{$x264preset} " +
-    "--tune film --pass 1 --bitrate #{@bitrate} --stats \"#{path}.stats\" --thread-input --output NUL \"#{path}.avs\""
+    "--tune film --pass 1 --bitrate #{@bitrate} --stats \"#{path}.stats\" --thread-input --qpfile \"#{@track.tempdir}\\qpfile.txt\" --output NUL \"#{path}.avs\""
     %x{#{x264_cmd1}}
   end
 
@@ -241,7 +256,7 @@ EOS
     puts "Video encoding - pass 2"
     path = "%s\\VTS_%02d" % [@track.tempdir, @track.vts]
     x264_cmd2 = "\"#{$meguiPath}\\tools\\x264\\x264.exe\" --profile high --sar #{@track.video_stream.dx}:#{@track.video_stream.dy} --preset #{$x264preset} " +
-    "--tune film --pass 2 --bitrate #{@bitrate} --stats \"#{path}.stats\" --thread-input --aud --output \"#{path}.264\" \"#{path}.avs\""
+    "--tune film --pass 2 --bitrate #{@bitrate} --stats \"#{path}.stats\" --thread-input  --qpfile \"#{@track.tempdir}\\qpfile.txt\" --aud --output \"#{path}.264\" \"#{path}.avs\""
     %x{#{x264_cmd2}}
   end
 end
@@ -342,13 +357,30 @@ private
 end
 
 class ChapterStream < Stream
-  def initialize(track, chapter_filename)
+  def initialize(track)
     @track = track
-    @chapter_filename = chapter_filename
+    @path = "#{@track.tempdir}\\VTS_#{'%02d' % @track.vts} - Chapter Information - OGG"
+  end
+  
+  def encode
+    File.open("#{@path} - fix.txt", "w") do |fw|
+      File.foreach("#{@path}.txt") do |line|
+        if line =~ /(CHAPTER\d+)=(\d+):(\d+):(\d+)\.(\d+)/ then
+          ts = Time.utc(2000, 1, 1, $2.to_i, $3.to_i, $4.to_i, $5.to_i * 1000)
+          ts_ref = Time.utc(2000)
+          sec = (ts - ts_ref) * 1.001
+          new_ts = ts_ref + sec
+          fw.puts "#{$1}=#{new_ts.strftime("%H:%M:%S")}\.#{new_ts.usec / 1000}"
+        else
+          fw.puts line
+        end
+      end
+    end
   end
   
   def mux
-    "--chapters \"#{@chapter_filename}\""
+    chapter_filename = "#{@path} - fix.txt"
+    "--chapters \"#{chapter_filename}\""
   end
 end
 
@@ -444,8 +476,8 @@ class Track
 
     @streams = aud_streams.delete_if { |s| s.channels < max_channels }
     @streams << VobSubStream.new(self, sub_streams) if sub_streams.length != 0
+    @streams << ChapterStream.new(self)
     @streams << video
-    @streams << ChapterStream.new(self, "#{@path} - Chapter Information - OGG.txt")
   end
   
   def encode
