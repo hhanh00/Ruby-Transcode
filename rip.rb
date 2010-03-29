@@ -91,11 +91,28 @@ class Disk
       $last_mounted = @image
     end
   end
+  
+  def parse_len(vts, pgc)
+    path = "#{@drive_letter}:\\VIDEO_TS\\VTS_#{'%02d' % vts}_0.IFO"
+    File::open(path, 'r') do |f|
+      x = f.read(256)
+      offset_of_pgciti = x[0xCC...0xD0].unpack('N').first
+      f.seek(offset_of_pgciti * 0x800 + 8 * pgc)
+      x = f.read(8)
+      offset_of_pgci = x[4...8].unpack('N').first
+      f.seek(offset_of_pgciti * 0x800 + offset_of_pgci)
+      x = f.read(16)
+      ts = x[4...7].unpack('CCC')
+      ts = ts.map { |x| ((x & 0xF0) >> 4) * 10 + (x & 0x0F) }
+      return Time.utc(2000, 1, 1, ts[0], ts[1], ts[2], 0) - Time.utc(2000)
+    end
+  end
 
   def parse_vmg
     puts "Parsing Video Manager IFO"
     path = "#{@drive_letter}:\\VIDEO_TS\\VIDEO_TS.IFO"
     title_map = []
+    title_map[0] = { :length => 0 }
     File::open(path, 'r') do |f|
       x = f.read(256)
       offset_of_srpt = x[0xC4...0xC8].unpack('N').first
@@ -105,7 +122,7 @@ class Disk
       offset = 8
       (1..titles).each do |i| 
         a = x.slice(offset, 12).unpack("ccnnccN")
-        title_map[i] = { :vts => a[4], :pgc => a[5] }
+        title_map[i] = { :vts => a[4], :pgc => a[5], :length => parse_len(a[4], a[5]) }
         offset += 12
       end
     end
@@ -508,6 +525,7 @@ def make_file(file)
   begin
     yield
   rescue Interrupt
+    sleep 5
     File.unlink(file) if File.exists?(file)
     raise $!
   end
@@ -536,7 +554,12 @@ begin
     disk.mount
     title_map = disk.parse_vmg
     name = d["name"]
-    title = d["title"] || 1
+    if d["title"].nil? then
+      title = title_map.each_with_index.max { |a,b| a[0][:length] <=> b[0][:length] }[1]
+      puts "Autopicked title #{title}, duration = #{(Time.utc(2000) + title_map[title][:length]).strftime("%H:%M:%S")}"
+    else
+      title = d["title"]
+    end
     season = d["season"] || 1
     episode = d["episode"] || 1
     type = d["type"] || "film"
