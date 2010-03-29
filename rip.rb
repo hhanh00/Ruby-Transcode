@@ -173,6 +173,7 @@ end
 class VideoStream < Stream
   def initialize(track, id, info, stream)
     super track, id, info, stream
+    @path = "#{@track.tempdir}\\VTS_#{'%02d' % @track.vts}"
   end
   
   def encode
@@ -181,29 +182,28 @@ class VideoStream < Stream
     avs
     autobitrate
     qpfile
-    make_file ("#{@track.tempdir}\\VTS_#{'%02d' % @track.vts}.264") {
+    make_file ("#{@path}.264") {
       encode1
       encode2
     }
   end
   
   def mux
-    path = "#{@track.tempdir}\\VTS_#{'%02d' % @track.vts}.264"
+    path = "#{@path}.264"
     "--default-duration 0:#{@track.fps}000/1001fps " +
     "-d 0 -A -S -T \"#{path}\""
   end
   
 private
   def precrop_avs
-    path = "#{@track.tempdir}\\VTS_#{'%02d' % @track.vts}"
     c = @track.video_stream.crop
     x = <<EOS
 LoadPlugin("#{$meguiPath}\\tools\\dgindex\\DGDecode.dll")
-DGDecode_mpeg2source("#{path}_1.d2v", info=3)
+DGDecode_mpeg2source("#{@path}_1.d2v", info=3)
 LoadPlugin("#{$meguiPath}\\tools\\avisynth_plugin\\ColorMatrix.dll")
 ColorMatrix(hints=true, threads=0)
 EOS
-    avs_file = File.open(path + '-precrop.avs', 'w') do |file|
+    avs_file = File.open(@path + '-precrop.avs', 'w') do |file|
       file.puts x
       if @track.interlaced then
         file.puts "Load_Stdcall_Plugin(\"#{$meguiPath}\\tools\\yadif\\yadif.dll\")"
@@ -214,7 +214,7 @@ EOS
   
   def autocrop
     if @track.video_stream.autocrop then
-      path_precrop_avs = "#{@track.tempdir}\\VTS_#{'%02d' % @track.vts}-precrop.avs"
+      path_precrop_avs = "#{@path}-precrop.avs"
       @ac = WIN32OLE.new('autocroplib.AutoCrop')
       @ac.GetAutoCropValues(path_precrop_avs)
       c = Crop.new(@ac.left, @ac.top, @ac.right, @ac.bottom)
@@ -224,8 +224,8 @@ EOS
   end
     
   def avs
-    path_precrop_avs = "#{@track.tempdir}\\VTS_#{'%02d' % @track.vts}-precrop.avs"
-    path_avs = "#{@track.tempdir}\\VTS_#{'%02d' % @track.vts}.avs"
+    path_precrop_avs = "#{@path}-precrop.avs"
+    path_avs = "#{@path}.avs"
     File.open(path_avs, 'w') do |w|
       File.foreach(path_precrop_avs) do |line|
         w.puts line
@@ -249,7 +249,7 @@ EOS
   
   def qpfile
     ts_ref = Time.utc(2000)
-    path = "#{@track.tempdir}\\VTS_#{'%02d' % @track.vts} - Chapter Information - OGG - fix.txt"
+    path = "#{@path} - Chapter Information - OGG - fix.txt"
     File.open("#{@track.tempdir}\\qpfile.txt", "w") do |fw|
       File.foreach(path) do |line|
         if line =~ /(CHAPTER\d+)=(\d+):(\d+):(\d+)\.(\d+)/ then
@@ -261,12 +261,19 @@ EOS
     end
   end
   
+  def run_x264_64(x264_cmd)
+	avs2yuv_cmd = "\"#{$meguiPath}\\tools\\x264\\avs2yuv.exe\" #{@path}.avs -o -"
+	cmd = "\"#{$meguiPath}\\tools\\x264\\pipebuf.exe\" #{avs2yuv_cmd} : #{x264_cmd} : 0"
+	puts cmd
+	%x{#{cmd}}
+  end
+  
   def encode1
     puts "Video encoding - pass 1"
     path = "#{@track.tempdir}\\VTS_#{'%02d' % @track.vts}"
     x264_cmd1 = "\"#{$meguiPath}\\tools\\x264\\x264.exe\" --profile high --sar #{@track.video_stream.dx}:#{@track.video_stream.dy} --preset #{$x264preset} " +
     "--tune film --pass 1 --bitrate #{@bitrate} --stats \"#{path}.stats\" --thread-input --qpfile \"#{@track.tempdir}\\qpfile.txt\" --output NUL \"#{path}.avs\""
-    %x{#{x264_cmd1}}
+    run_x264_64(x264_cmd1)
   end
 
   def encode2
@@ -274,7 +281,7 @@ EOS
     path = "%s\\VTS_%02d" % [@track.tempdir, @track.vts]
     x264_cmd2 = "\"#{$meguiPath}\\tools\\x264\\x264.exe\" --profile high --sar #{@track.video_stream.dx}:#{@track.video_stream.dy} --preset #{$x264preset} " +
     "--tune film --pass 2 --bitrate #{@bitrate} --stats \"#{path}.stats\" --thread-input  --qpfile \"#{@track.tempdir}\\qpfile.txt\" --aud --output \"#{path}.264\" \"#{path}.avs\""
-    %x{#{x264_cmd2}}
+    run_x264_64(x264_cmd2)
   end
 end
 
