@@ -16,6 +16,8 @@ $mkvmergePath = project["mkvmerge"]
 
 $demuxPath = $meguiPath + '\tools\dgindex\DGIndex.exe'
 
+$is64OS = !ENV['PROCESSOR_ARCHITEW6432'].nil?
+
 $last_mounted = nil
 
 class Crop
@@ -261,27 +263,40 @@ EOS
     end
   end
   
-  def run_x264_64(x264_cmd)
-	avs2yuv_cmd = "\"#{$meguiPath}\\tools\\x264\\avs2yuv.exe\" #{@path}.avs -o -"
-	cmd = "\"#{$meguiPath}\\tools\\x264\\pipebuf.exe\" #{avs2yuv_cmd} : #{x264_cmd} : 0"
-	puts cmd
-	%x{#{cmd}}
+  def run_x264_64(x264_opt)
+    avs2yuv_cmd = "\"#{$meguiPath}\\tools\\x264\\avs2yuv.exe\" #{@path}.avs -o -"
+    x264_cmd = "\"#{$meguiPath}\\tools\\x264\\x264_x64.exe\" - --stdin y4m #{x264_opt}"
+    cmd = "\"#{$meguiPath}\\tools\\x264\\pipebuf.exe\" #{avs2yuv_cmd} : #{x264_cmd} : 0"
+    %x{#{cmd}}
+  end
+  
+  def run_x264_32(x264_opt)
+    x264_cmd = "\"#{$meguiPath}\\tools\\x264\\x264.exe\" #{x264_opt} #{@path}.avs"
+    %x{#{x264_cmd}}
   end
   
   def encode1
     puts "Video encoding - pass 1"
     path = "#{@track.tempdir}\\VTS_#{'%02d' % @track.vts}"
-    x264_cmd1 = "\"#{$meguiPath}\\tools\\x264\\x264.exe\" --profile high --sar #{@track.video_stream.dx}:#{@track.video_stream.dy} --preset #{$x264preset} " +
-    "--tune film --pass 1 --bitrate #{@bitrate} --stats \"#{path}.stats\" --thread-input --qpfile \"#{@track.tempdir}\\qpfile.txt\" --output NUL \"#{path}.avs\""
-    run_x264_64(x264_cmd1)
+    x264_opt = "--profile high --sar #{@track.video_stream.dx}:#{@track.video_stream.dy} --preset #{$x264preset} " +
+    "--tune film --pass 1 --bitrate #{@bitrate} --stats \"#{path}.stats\" --thread-input --qpfile \"#{@track.tempdir}\\qpfile.txt\" --output NUL"
+    if $is64OS then
+      run_x264_64(x264_opt)
+    else
+      run_x264_32(x264_opt)
+    end
   end
 
   def encode2
     puts "Video encoding - pass 2"
     path = "%s\\VTS_%02d" % [@track.tempdir, @track.vts]
-    x264_cmd2 = "\"#{$meguiPath}\\tools\\x264\\x264.exe\" --profile high --sar #{@track.video_stream.dx}:#{@track.video_stream.dy} --preset #{$x264preset} " +
-    "--tune film --pass 2 --bitrate #{@bitrate} --stats \"#{path}.stats\" --thread-input  --qpfile \"#{@track.tempdir}\\qpfile.txt\" --aud --output \"#{path}.264\" \"#{path}.avs\""
-    run_x264_64(x264_cmd2)
+    x264_opt = "--profile high --sar #{@track.video_stream.dx}:#{@track.video_stream.dy} --preset #{$x264preset} " +
+    "--tune film --pass 2 --bitrate #{@bitrate} --stats \"#{path}.stats\" --thread-input  --qpfile \"#{@track.tempdir}\\qpfile.txt\" --aud --output \"#{path}.264\""
+    if $is64OS then
+      run_x264_64(x264_opt)
+    else
+      run_x264_32(x264_opt)
+    end
   end
 end
 
