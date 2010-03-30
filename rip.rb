@@ -190,9 +190,16 @@ class VideoStream < Stream
     }
   end
   
+  def round_to(x, prec)
+    (x / prec).round * prec
+  end
+  
   def mux
     path = "#{@path}.264"
-    "--default-duration 0:#{@track.fps}000/1001fps " +
+    vs = @track.video_stream
+    c = vs.crop
+    ar = round_to((720 - c.left - c.right ).to_f / (480 - c.top - c.bottom) * vs.dx / vs.dy, 0.01)
+    "--default-duration 0:#{@track.fps}000/1001fps --aspect-ratio 0:#{ar} " +
     "-d 0 -A -S -T \"#{path}\""
   end
   
