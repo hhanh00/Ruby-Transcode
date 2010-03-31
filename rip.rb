@@ -272,7 +272,7 @@ EOS
   
   def run_x264_64(x264_opt)
     avs2yuv_cmd = "\"#{$meguiPath}\\tools\\x264\\avs2yuv.exe\" #{@path}.avs -o -"
-    x264_cmd = "\"#{$meguiPath}\\tools\\x264\\x264_x64.exe\" - --stdin y4m #{x264_opt}"
+    x264_cmd = "\"#{$meguiPath}\\tools\\x264\\x264_64.exe\" - --stdin y4m #{x264_opt}"
     cmd = "\"#{$meguiPath}\\tools\\x264\\pipebuf.exe\" #{avs2yuv_cmd} : #{x264_cmd} : 0"
     %x{#{cmd}}
   end
