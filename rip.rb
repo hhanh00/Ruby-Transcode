@@ -466,6 +466,8 @@ class Track
   
   def run
     puts "Processing #{@name}"
+    FileUtils.mkdir_p("#{@tempdir}")
+    File.open("#{@tempdir}\\readme.txt", "w") { |f| f.puts "#{@name}" }
     @disk.mount
     decrypt
     demux
