@@ -11,6 +11,10 @@ def green(text)
     puts "\033[0;32;40m#{text}\033[0m"
 end
 
+def cyan(text)
+    puts "\033[0;36;40m#{text}\033[0m"
+end
+
 def read_config
   config = YAML::load_file('config.yaml')
   project = YAML::load_file('dvdrip.yaml')
@@ -490,7 +494,7 @@ class Track
     parse_stream_file
     encode
     mux
-    red("Finished processing #{@name}")
+    cyan("Finished processing #{@name}")
   end
   
   def decrypt
