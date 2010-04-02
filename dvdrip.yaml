@@ -1,27 +1,22 @@
-x264preset: slower
-clonedrive:
-  path: C:\Program Files\Elaborate Bytes\VirtualCloneDrive\Daemon.exe
-  letter: K
-  index: 0
-decrypter: C:\Program Files\DVD Decrypter\DVDDecrypter.exe
-mkvmerge: C:\Program Files\MKVtoolnix\mkvmerge.exe
-megui: C:\Program Files\megui
+x264preset: ultrafast
 tempdir: D:\TEMPRIP
-outdir: D:\DVD
+outdir: D:\DVD2
 bitrate: 1200
 audio:
 - English
 sub:
 - English
 disk:
-- image: E:\XFDISC1.iso
-  name: "X-Files"
-  season: 2
+- image: D:\DVD\TWO_AND_A_HALF_MEN_SEASON_5_D2.ISO
+  name: Two and a Half Men
   title: 1
-  episode: 1
+  season: 5
+  episode: 8
   tracks:
-  - Little Green Men
-  - The Host
-  - Blood
-  - Sleepless
+    - Is There a Mrs. Waffles
+    - Tight's Good
+    - Kinda Like Necrophilia
+    - Meander to Your Dander
+    - A Little Clammy and None Too Fresh
+    - The Soil is Moist
 ---

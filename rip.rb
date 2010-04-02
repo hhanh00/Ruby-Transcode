@@ -1,8 +1,24 @@
+require 'Win32/Console/ANSI'
 require 'WIN32OLE'
 require "fileutils"
 require "yaml"
 
-project = YAML::load(File.read('dvdrip.yaml'))
+def red(text)
+    puts "\033[0;31;40m#{text}\033[0m"
+end
+
+def green(text)
+    puts "\033[0;32;40m#{text}\033[0m"
+end
+
+def read_config
+  config = YAML::load_file('config.yaml')
+  project = YAML::load_file('dvdrip.yaml')
+  project.merge!(config)
+  project
+end
+
+project = read_config()
 
 $x264preset = project["x264preset"]
 $tempdir = project["tempdir"]
@@ -86,7 +102,7 @@ class Disk
   
   def mount
     if @is_image && $last_mounted != @image then
-      puts "Mounting image file #{@image}"
+      green("Mounting image file #{@image}")
       mount_cmd = "\"#{$clonedrivePath}\" -mount #{$clonedriveIndex},\"#{@image}\""
       %x{#{mount_cmd}}
       sleep 10
@@ -111,7 +127,7 @@ class Disk
   end
 
   def parse_vmg
-    puts "Parsing Video Manager IFO"
+    green("Parsing Video Manager IFO")
     path = "#{@drive_letter}:\\VIDEO_TS\\VIDEO_TS.IFO"
     title_map = []
     title_map[0] = { :length => 0 }
@@ -227,7 +243,7 @@ EOS
       @ac = WIN32OLE.new('autocroplib.AutoCrop')
       @ac.GetAutoCropValues(path_precrop_avs)
       c = Crop.new(@ac.left, @ac.top, @ac.right, @ac.bottom)
-      puts "Autocrop to #{c}"
+      green("Autocrop to #{c}")
       @track.video_stream.crop = c
     end
   end
@@ -253,7 +269,7 @@ EOS
     else
       @bitrate = @track.video_stream.bitrate
     end
-    puts "Video bitrate = %d" % @bitrate
+    green("Video bitrate = #{@bitrate}")
   end
   
   def qpfile
@@ -283,7 +299,7 @@ EOS
   end
   
   def encode1
-    puts "Video encoding - pass 1"
+    green("Video encoding - pass 1")
     path = "#{@track.tempdir}\\VTS_#{'%02d' % @track.vts}"
     x264_opt = "--profile high --sar #{@track.video_stream.dx}:#{@track.video_stream.dy} --preset #{$x264preset} " +
     "--tune film --pass 1 --bitrate #{@bitrate} --stats \"#{path}.stats\" --thread-input --qpfile \"#{@track.tempdir}\\qpfile.txt\" --output NUL"
@@ -295,7 +311,7 @@ EOS
   end
 
   def encode2
-    puts "Video encoding - pass 2"
+    green("Video encoding - pass 2")
     path = "%s\\VTS_%02d" % [@track.tempdir, @track.vts]
     x264_opt = "--profile high --sar #{@track.video_stream.dx}:#{@track.video_stream.dy} --preset #{$x264preset} " +
     "--tune film --pass 2 --bitrate #{@bitrate} --stats \"#{path}.stats\" --thread-input  --qpfile \"#{@track.tempdir}\\qpfile.txt\" --aud --output \"#{path}.264\""
@@ -344,7 +360,7 @@ class VobSubStream < Stream
 private
   def vobsubrip
     make_file("#{@track.tempdir}\\VTS_#{'%02d' % @track.vts}.idx") {
-      puts "Extracting subtitles"
+      green("Extracting subtitles")
       vobsub_param = "#{@track.tempdir}\\vobsub.txt"
       path = "#{@track.tempdir}\\VTS_#{'%02d' % @track.vts}"
       File.open(vobsub_param, 'w') do |f|
@@ -465,7 +481,7 @@ class Track
   end
   
   def run
-    puts "Processing #{@name}"
+    red("Processing #{@name}")
     FileUtils.mkdir_p("#{@tempdir}")
     File.open("#{@tempdir}\\readme.txt", "w") { |f| f.puts "#{@name}" }
     @disk.mount
@@ -474,18 +490,19 @@ class Track
     parse_stream_file
     encode
     mux
+    red("Finished processing #{@name}")
   end
   
   def decrypt
     make_file ("#{@tempdir}\\VTS_#{'%02d' % @vts}_0.IFO") {
-      puts "Decrypting"
+      green("Decrypting")
       decrypt_cmd = "\"#{$decrypterPath}\" /SRC #{@disk.drive_letter}: /DEST \"#{@tempdir}\" /VTS #{@vts} /PGC #{@pgc} /MODE IFO /START /CLOSE"
       %x{#{decrypt_cmd}}
     }
   end
   
   def parse_stream_file
-    puts "Parsing stream info file"
+    green("Parsing stream info file")
     @streams = []
     aud_streams = []
     sub_streams = []
@@ -534,7 +551,7 @@ class Track
   
   def demux
     make_file ("#{@tempdir}\\VTS_#{'%02d' % @vts}_1.d2v") {
-      puts "Demuxing"
+      green("Demuxing")
       path = "#{@path}_1"
       demux_cmd = "\"#{$demuxPath}\" -i \"#{path}.VOB\" -o \"#{path}\" -fo #{@ivtc ? 1 : 0} -exit"
       %x{#{demux_cmd}}
@@ -544,7 +561,7 @@ class Track
   def mux
     path = "#{@outdir}\\#{@name}.mkv"
     make_file(path) {
-      puts "Remuxing"
+      green("Remuxing")
       mux_cmd = "\"#{$mkvmergePath}\" -o \"#{path}\" " + @streams.map { |s| s.mux }.join(' ')
       %x{#{mux_cmd}}
     }
@@ -569,7 +586,7 @@ shutdown = false
 begin 
   tracks_done = File.exist?(TrackDoneFileName) ? YAML::load(File.read(TrackDoneFileName)) : {}
   more_work = false
-  project = YAML::load_file('dvdrip.yaml')
+  project = read_config()
   shutdown = project["shutdown"]
   tracks = []
   outdir = project["outdir"]
@@ -587,7 +604,7 @@ begin
     name = d["name"]
     if d["title"].nil? then
       title = title_map.each_with_index.max { |a,b| a[0][:length] <=> b[0][:length] }[1]
-      puts "Autopicked title #{title}, duration = #{(Time.utc(2000) + title_map[title][:length]).strftime("%H:%M:%S")}"
+      green("Autopicked title #{title}, duration = #{(Time.utc(2000) + title_map[title][:length]).strftime("%H:%M:%S")}")
     else
       title = d["title"]
     end
