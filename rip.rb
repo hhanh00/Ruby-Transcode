@@ -154,6 +154,7 @@ end
 
 class Stream
   attr_reader :id, :info, :stream
+  attr_accessor :index
   def initialize(track, id, info, stream)
     @track = track
     @id = id
@@ -162,6 +163,10 @@ class Stream
   end
   
   def encode
+  end
+  
+  def track_list
+    "#{@index}:0"
   end
 end
 
@@ -189,6 +194,10 @@ class AudioStream < Stream
   
   def size
     File.size(@path)
+  end
+  
+  def merit
+    1
   end
 end
 
@@ -223,6 +232,10 @@ class VideoStream < Stream
     "-d 0 -A -S -T \"#{path}\""
   end
   
+  def merit
+    0
+  end
+
 private
   def precrop_avs
     c = @track.video_stream.crop
@@ -360,7 +373,15 @@ class VobSubStream < Stream
     arg = x.map { |a| a[0].mux(a[1]) }.join(' ')
     arg + " -s #{(0...@sub_streams.length).to_a.join(',')} -D -A -T \"#{path}\""
   end
+  
+  def track_list
+    (0...@sub_streams.length).map { |i| "#{@index}:#{i}" }.join(',')
+  end
 
+  def merit
+    2
+  end
+  
 private
   def vobsubrip
     make_file("#{@track.tempdir}\\VTS_#{'%02d' % @track.vts}.idx") {
@@ -447,6 +468,10 @@ class ChapterStream < Stream
   def mux
     chapter_filename = "#{@path} - fix.txt"
     "--chapters \"#{chapter_filename}\""
+  end
+
+  def merit
+    -1
   end
 end
 
@@ -563,10 +588,14 @@ class Track
   end
   
   def mux
+    mux_streams = @streams.clone
+    mux_streams.delete_if { |s| s.merit < 0 }
+    mux_streams.each_with_index { |s,i| s.index = i }
+    track_order = mux_streams.sort { |x,y| x.merit <=> y.merit }.map{ |s| s.track_list }.join(',')
     path = "#{@outdir}\\#{@name}.mkv"
     make_file(path) {
       green("Remuxing")
-      mux_cmd = "\"#{$mkvmergePath}\" -o \"#{path}\" " + @streams.map { |s| s.mux }.join(' ')
+      mux_cmd = "\"#{$mkvmergePath}\" -o \"#{path}\" " + @streams.map { |s| s.mux }.join(' ') + " --track-order \"#{track_order}\""
       %x{#{mux_cmd}}
     }
   end
