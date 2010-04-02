@@ -635,6 +635,7 @@ begin
     disk.mount
     title_map = disk.parse_vmg
     name = d["name"]
+    raise "Invalid character in name" if name =~ /[\\\/:\*\?"<>|]/
     if d["title"].nil? then
       title = title_map.each_with_index.max { |a,b| a[0][:length] <=> b[0][:length] }[1]
       green("Autopicked title #{title}, duration = #{(Time.utc(2000) + title_map[title][:length]).strftime("%H:%M:%S")}")
