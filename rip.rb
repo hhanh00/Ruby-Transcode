@@ -32,9 +32,8 @@ $clonedriveIndex = project["clonedrive"]["index"]
 
 $decrypterPath = project["decrypter"]
 $meguiPath = project["megui"]
-$mkvmergePath = project["mkvmerge"]
-
-$demuxPath = $meguiPath + '\tools\dgindex\DGIndex.exe'
+$mkvmergePath = "#{$meguiPath}\\tools\\mkvmerge\\mkvmerge.exe"
+$demuxPath = "#{$meguiPath}\\tools\\dgindex\\DGIndex.exe"
 
 $is64OS = !ENV['PROCESSOR_ARCHITEW6432'].nil?
 
@@ -213,8 +212,10 @@ class VideoStream < Stream
     avs
     autobitrate
     qpfile
-    make_file ("#{@path}.264") {
+    make_file ("#{@path}.stats") {
       encode1
+    }
+    make_file ("#{@path}.264") {
       encode2
     }
   end
