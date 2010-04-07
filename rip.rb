@@ -413,8 +413,9 @@ private
         if look_for_id && line =~ /index: (\d+)/ then
           id = $1.to_i
           look_for_id = false
-        elsif !look_for_id && line =~ /timestamp: (\d+):(\d+):(\d+):(\d+)/ then
-          ts_idx = Time.utc(2000, 1, 1, $1.to_i, $2.to_i, $3.to_i, $4.to_i * 1000)
+        elsif !look_for_id && line =~ /timestamp: (-?)(\d+):(\d+):(\d+):(\d+)/ then
+          sign = $1.empty? ? 1 : -1
+          ts_idx = Time.utc(2000, 1, 1, sign * $2.to_i, sign * $3.to_i, sign * $4.to_i, sign * $5.to_i * 1000)
           s = @sub_streams.find { |s| s.id == id }
           s.info =~ /PTS: (\d+):(\d+):(\d+)\.(\d+)/
           ts_stream = Time.utc(2000, 1, 1, $1.to_i, $2.to_i, $3.to_i, $4.to_i * 1000)
