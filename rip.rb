@@ -196,7 +196,7 @@ class AudioStream < Stream
   end
   
   def merit
-    1
+    1 + Integer(@id).to_f / 1000
   end
 end
 
