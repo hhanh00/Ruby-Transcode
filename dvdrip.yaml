@@ -1,4 +1,4 @@
-x264preset: ultrafast
+x264preset: slower
 tempdir: D:\TEMPRIP
 outdir: D:\DVD2
 bitrate: 1200
@@ -7,16 +7,7 @@ audio:
 sub:
 - English
 disk:
-- image: D:\DVD\TWO_AND_A_HALF_MEN_SEASON_5_D2.ISO
-  name: Two and a Half Men
-  title: 1
-  season: 5
-  episode: 8
-  tracks:
-    - Is There a Mrs. Waffles
-    - Tight's Good
-    - Kinda Like Necrophilia
-    - Meander to Your Dander
-    - A Little Clammy and None Too Fresh
-    - The Soil is Moist
+- image: E
+  name: Secretary
+  type: interlaced
 ---

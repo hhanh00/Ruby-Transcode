@@ -1,6 +1,6 @@
 clonedrive:
   path: C:\Program Files (x86)\Elaborate Bytes\VirtualCloneDrive\Daemon.exe
-  letter: H
+  letter: F
   index: 0
 decrypter: C:\Program Files (x86)\DVD Decrypter\DVDDecrypter.exe
 megui: C:\Program Files (x86)\megui
