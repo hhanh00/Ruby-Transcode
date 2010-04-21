@@ -478,9 +478,9 @@ class ChapterStream < Stream
 end
 
 class Track
-  attr_reader :type, :tempdir, :vts, :pgc, :name, :video_stream, :audio_streams, :sub_streams,
+  attr_reader :tempdir, :vts, :pgc, :name, :video_stream, :audio_streams, :sub_streams,
     :fps, :ivtc, :interlaced
-  attr_accessor :size
+  attr_accessor :type, :size
   
   def initialize(outdir, type, size, vts, pgc, name, disk, video_stream, audio_streams, sub_streams)
     @outdir = outdir
@@ -495,20 +495,6 @@ class Track
     @size = size && size * 1024 * 1024
     @tempdir = "#{$tempdir}\\#{@disk.ord}.#{@vts}.#{@pgc}"
     @path = "#{@tempdir}\\VTS_#{'%02d' % @vts}"
-    case @type
-      when "film"
-        @fps = 24
-        @ivtc = true
-        @interlaced = false
-      when "progressive"
-        @fps = 30
-        @ivtc = false
-        @interlaced = false
-      when "interlaced"
-        @fps = 30
-        @ivtc = false
-        @interlaced = true
-    end
   end
   
   def run
@@ -581,12 +567,59 @@ class Track
   end
   
   def demux
+    set_video_type
     make_file ("#{@tempdir}\\VTS_#{'%02d' % @vts}_1.d2v") {
       green("Demuxing")
       path = "#{@path}_1"
-      demux_cmd = "\"#{$demuxPath}\" -i \"#{path}.VOB\" -o \"#{path}\" -fo #{@ivtc ? 1 : 0} -exit"
-      %x{#{demux_cmd}}
+      while true
+        demux_cmd = "\"#{$demuxPath}\" -i \"#{path}.VOB\" -o \"#{path}\" -fo #{@ivtc ? 1 : 0} -exit"
+        %x{#{demux_cmd}}
+        if @type == 'auto' then
+          set_video_type 
+          redo if @type != "film"
+        end
+        break
+      end
     }
+  end
+  
+  def set_video_type
+    @type = parse_demux_log if @type == "auto" && File.exists?("#{@tempdir}\\VTS_#{'%02d' % @vts}_1.log")
+    case @type
+      when "auto", "film"
+        @fps = 24
+        @ivtc = true
+        @interlaced = false
+      when "progressive"
+        @fps = 30
+        @ivtc = false
+        @interlaced = false
+      when "interlaced"
+        @fps = 30
+        @ivtc = false
+        @interlaced = true
+    end
+  end
+  
+  def parse_demux_log
+    film_percent = 0
+    progressive = false
+    File.foreach("#{@tempdir}\\VTS_#{'%02d' % @vts}_1.log") do |line|
+      if line =~ /Video Type: Film (\d+(\.\d+)?)%/ then
+        film_percent = $1.to_f
+      end
+      if line == "Frame Type: Progressive" then
+        progressive = true
+      end
+    end
+    if film_percent >= 98 then 
+      type = "film" 
+    elsif progressive
+      type = "progressive"
+    else
+      type = "interlaced"
+    end
+    type
   end
   
   def mux
@@ -608,7 +641,7 @@ def make_file(file)
   begin
     yield
   rescue Interrupt
-    sleep 5
+    sleep 2
     File.unlink(file) if File.exists?(file)
     raise $!
   end
@@ -646,7 +679,7 @@ begin
     end
     season = d["season"] || 1
     episode = d["episode"] || 1
-    type = d["type"] || "film"
+    type = d["type"] || "auto"
     track_names = []
     if d["tracks"].nil? then
       track_names << { :name => name, :title => title }
