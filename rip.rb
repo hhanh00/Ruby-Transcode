@@ -605,8 +605,8 @@ class Track
     film_percent = 0
     progressive = false
     File.foreach("#{@tempdir}\\VTS_#{'%02d' % @vts}_1.log") do |line|
-      if line =~ /Video Type: Film (\d+(\.\d+)?)%/ then
-        film_percent = $1.to_f
+      if line =~ /Video Type: Film( (\d+(\.\d+)?)%)?/ then
+        film_percent = $1.nil? ? 100 : $2.to_f
       end
       if line == "Frame Type: Progressive" then
         progressive = true
