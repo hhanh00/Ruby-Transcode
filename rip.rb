@@ -612,7 +612,7 @@ class Track
         progressive = true
       end
     end
-    if film_percent >= 98 then 
+    if film_percent >= 95 then 
       type = "film" 
     elsif progressive
       type = "progressive"
