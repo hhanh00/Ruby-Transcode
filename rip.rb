@@ -70,9 +70,10 @@ class Video
 end
 
 class Audio
-  attr_reader :language
-  def initialize(language)
-    @language = language
+  attr_reader :language, :priority
+  def initialize(language, priority)
+    @language = language.encode("ISO-8859-1")
+    @priority = priority
   end
   def to_s
     "Audio #{@language}"
@@ -80,9 +81,10 @@ class Audio
 end
 
 class Sub
-  attr_reader :language
-  def initialize(language)
-    @language = language
+  attr_reader :language, :priority
+  def initialize(language, priority)
+    @language = language.encode("ISO-8859-1")
+    @priority = priority
   end
   def to_s
     "Sub #{@language}"
@@ -90,7 +92,7 @@ class Sub
 end
 
 class Disk
-  attr_reader :image, :ord, :drive_letter
+  attr_reader :image, :ord, :drive_letter, :title_map
   def initialize(image, ord)
     @image = image
     if @image =~ /\.ISO$/i then
@@ -116,7 +118,7 @@ class Disk
   def parse_len(vts, pgc)
     path = "#{@drive_letter}:\\VIDEO_TS\\VTS_#{'%02d' % vts}_0.IFO"
     File::open(path, 'r') do |f|
-      x = f.read(256)
+      x = f.read(0x100)
       offset_of_pgciti = x[0xCC...0xD0].unpack('N').first
       f.seek(offset_of_pgciti * 0x800 + 8 * pgc)
       x = f.read(8)
@@ -128,35 +130,69 @@ class Disk
       return Time.utc(2000, 1, 1, ts[0], ts[1], ts[2], 0) - Time.utc(2000)
     end
   end
+  
+  def parse_audio_langcode(vts, pgc)
+    path = "#{@drive_letter}:\\VIDEO_TS\\VTS_#{'%02d' % vts}_0.IFO"
+    langcode = []
+    File::open(path, 'r') do |f|
+      f.seek(0x200)
+      x = f.read(0x100)
+      num_audio_streams = x[2...4].unpack('n').first
+      (0..num_audio_streams).each do |i|
+        beg = 6 + i * 8
+        langcode << x[beg...beg+2]
+        end
+    end
+    langcode
+  end
+
+  def parse_sub_langcode(vts, pgc)
+    path = "#{@drive_letter}:\\VIDEO_TS\\VTS_#{'%02d' % vts}_0.IFO"
+    langcode = []
+    File::open(path, 'r') do |f|
+      f.seek(0x200)
+      x = f.read(0x200)
+      num_audio_streams = x[0x54...0x56].unpack('n').first
+      (0..num_audio_streams).each do |i|
+        beg = 0x58 + i * 6
+        langcode << x[beg...beg+2]
+        end
+    end
+    langcode
+  end
 
   def parse_vmg
     green("Parsing Video Manager IFO")
     path = "#{@drive_letter}:\\VIDEO_TS\\VIDEO_TS.IFO"
-    title_map = []
-    title_map[0] = { :length => 0 }
+    @title_map = []
+    @title_map[0] = { :length => 0 }
     File::open(path, 'r') do |f|
-      x = f.read(256)
+      x = f.read(0x100)
       offset_of_srpt = x[0xC4...0xC8].unpack('N').first
       f.seek(offset_of_srpt * 0x800)
-      x = f.read(512)
+      x = f.read(0x200)
       titles = x[0...2].unpack('n').first
       offset = 8
       (1..titles).each do |i| 
         a = x.slice(offset, 12).unpack("ccnnccN")
-        title_map[i] = { :vts => a[4], :pgc => a[5], :length => parse_len(a[4], a[5]) }
+        vts = a[4]
+        pgc = a[5]
+        @title_map[i] = { :vts => vts, :pgc => pgc, :length => parse_len(vts, pgc), 
+          :audio_langcode => parse_audio_langcode(vts, pgc),
+          :sub_langcode => parse_sub_langcode(vts, pgc) }
         offset += 12
       end
     end
-    title_map
   end
 end
 
 class Stream
-  attr_reader :id, :info, :stream
-  attr_accessor :index
-  def initialize(track, id, info, stream)
+  attr_reader :id, :index, :info, :stream
+  attr_accessor :mux_index
+  def initialize(track, id, index, info, stream)
     @track = track
     @id = id
+    @index = index
     @info = info
     @stream = stream
   end
@@ -165,14 +201,14 @@ class Stream
   end
   
   def track_list
-    "#{@index}:0"
+    "#{@mux_index}:0"
   end
 end
 
 class AudioStream < Stream
   attr_reader :audio_filename, :channels
-  def initialize(track, id, channels, info, stream)
-    super track, id, info, stream
+  def initialize(track, id, index, channels, info, stream)
+    super track, id, index, info, stream
     @channels = channels
     track_number = "T%02x" % id
     @audio_filename = Dir.foreach(@track.tempdir).find { |f| f =~ /#{track_number}/ }
@@ -182,7 +218,8 @@ class AudioStream < Stream
   end
   
   def mux
-    "--language 0:#{@stream.language} " +
+    lang = @track.disk.title_map[@track.title][:audio_langcode][@index]
+    "--language 0:#{lang} " +
     "--sync 0:#{@delay} " +
     "-D -a 0 -S -T \"#{@path}\""
   end
@@ -202,7 +239,7 @@ end
 
 class VideoStream < Stream
   def initialize(track, id, info, stream)
-    super track, id, info, stream
+    super track, id, 0, info, stream
     @path = "#{@track.tempdir}\\VTS_#{'%02d' % @track.vts}"
   end
   
@@ -342,12 +379,13 @@ EOS
 end
 
 class SubtitleStream < Stream
-  def initialize(track, id, info, stream)
-    super track, id, info, stream
+  def initialize(track, id, index, info, stream)
+    super track, id, index, info, stream
   end
 
-  def mux(index)
-    "--language #{index}:#{@stream.language}"
+  def mux(mux_index)
+    lang = @track.disk.title_map[@track.title][:audio_langcode][@index]
+    "--language #{mux_index}:#{lang}"
   end
 end
 
@@ -376,7 +414,7 @@ class VobSubStream < Stream
   end
   
   def track_list
-    (0...@sub_streams.length).map { |i| "#{@index}:#{i}" }.join(',')
+    (0...@sub_streams.length).map { |i| "#{@mux_index}:#{i}" }.join(',')
   end
 
   def merit
@@ -478,15 +516,16 @@ class ChapterStream < Stream
 end
 
 class Track
-  attr_reader :tempdir, :vts, :pgc, :name, :video_stream, :audio_streams, :sub_streams,
+  attr_reader :tempdir, :title, :vts, :pgc, :name, :disk, :video_stream, :audio_streams, :sub_streams,
     :fps, :ivtc, :interlaced
   attr_accessor :type, :size
   
-  def initialize(outdir, type, size, vts, pgc, name, disk, video_stream, audio_streams, sub_streams)
+  def initialize(outdir, type, size, title, name, disk, video_stream, audio_streams, sub_streams)
     @outdir = outdir
     @type = type
-    @vts = vts
-    @pgc = pgc
+    @title = title
+    @vts = disk.title_map[title][:vts]
+    @pgc = disk.title_map[title][:pgc]
     @name = name
     @disk = disk
     @video_stream = video_stream
@@ -523,40 +562,48 @@ class Track
     @streams = []
     aud_streams = []
     sub_streams = []
+    audio_index = 0
     sub_index = 0
     max_channels = 0
     video = nil
-    File.foreach("#{@tempdir}\\VTS_#{'%02d' % @vts} - Stream Information.txt") do |line|
-      s = nil
-      id, type, info = line.split(' - ', 3)
-      case type
-      when "Subtitle"
-        info =~ /(\w+)/
-        language = $1
-        t = @sub_streams.find { |t| t.language == language }
-        sub_streams << SubtitleStream.new(self, sub_index, info, t) if t
-        sub_index += 1
-      when "Audio"
-        info = info.split(' / ', 8)
-        codec = info[0]
-        channels = info[1]
-        channels =~ /(\d+)ch/
-        channels = $1.to_i
-        max_channels = channels if channels > max_channels
-        language = info[4]
-        if codec == 'AC3' then
-          t = @audio_streams.find { |t| t.language == language }
-          aud_streams << AudioStream.new(self, id, channels, info, t) if t
+    File.open("#{@tempdir}\\VTS_#{'%02d' % @vts} - Stream Information.txt", "r:ISO-8859-1") do |f|
+      while (line = f.gets)
+        s = nil
+        id, type, info = line.split(' - ', 3)
+        case type
+        when "Subtitle"
+          info =~ /(\w+)/
+          language = $1
+          t = @sub_streams.find { |t| t.language == language }
+          sub_streams << SubtitleStream.new(self, id, sub_index, info, t) if t
+          sub_index += 1
+        when "Audio"
+          info = info.split(' / ', 8)
+          codec = info[0]
+          channels = info[1]
+          channels =~ /(\d+)ch/
+          channels = $1.to_i
+          language = info[4]
+          if codec == 'AC3' then
+            t = @audio_streams.find { |t| t.language == language }
+            aud_streams << AudioStream.new(self, id, audio_index, channels, info, t) if t
+          end
+          audio_index += 1
+        when "Video"
+          info = info.split(' / ', 7)
+          dar = info[2]
+          @video_stream.set_dar(dar)
+          video = VideoStream.new(self, id, info, @video_stream)
         end
-      when "Video"
-        info = info.split(' / ', 7)
-        dar = info[2]
-        @video_stream.set_dar(dar)
-        video = VideoStream.new(self, id, info, @video_stream)
       end
     end
 
-    @streams = aud_streams.delete_if { |s| s.channels < max_channels }
+    best_audio = aud_streams.min { |a,b| a.stream.priority <=> b.stream.priority }
+    aud_streams = aud_streams.delete_if { |a| a.stream.priority > best_audio.stream.priority }
+    max_channels = aud_streams.max { |a| a.channels }
+    @streams = aud_streams.delete_if { |a| a.channels < max_channels.channels }
+    best_sub = sub_streams.min { |a,b| a.stream.priority <=> b.stream.priority }
+    sub_streams = sub_streams.delete_if { |a| a.stream.priority > best_sub.stream.priority }
     @streams << VobSubStream.new(self, sub_streams) if sub_streams.length != 0
     @streams << ChapterStream.new(self)
     @streams << video
@@ -625,7 +672,7 @@ class Track
   def mux
     mux_streams = @streams.clone
     mux_streams.delete_if { |s| s.merit < 0 }
-    mux_streams.each_with_index { |s,i| s.index = i }
+    mux_streams.each_with_index { |s,i| s.mux_index = i }
     track_order = mux_streams.sort { |x,y| x.merit <=> y.merit }.map{ |s| s.track_list }.join(',')
     path = "#{@outdir}\\#{@name}.mkv"
     make_file(path) {
@@ -662,18 +709,18 @@ begin
     c = Crop.new(project["crop"]["left"], project["crop"]["top"], project["crop"]["right"], project["crop"]["bottom"])
   end
   video_stream = Video.new(c, project["bitrate"])
-  audio_streams = project["audio"].map { |lang| Audio.new(lang) }
-  sub_streams = project["sub"].map { |lang| Sub.new(lang) }
+  audio_streams = project["audio"].map { |lang, priority| Audio.new(lang, priority) }
+  sub_streams = project["sub"].map { |lang, priority| Sub.new(lang, priority) }
   project["disk"].each do |d| 
     disk_index += 1
     disk = Disk.new(d["image"], disk_index)
     disk.mount
-    title_map = disk.parse_vmg
+    disk.parse_vmg
     name = d["name"]
     raise "Invalid character in #{name}" if name =~ /[\\\/:\*\?"<>|]/
     if d["title"].nil? then
-      title = title_map.each_with_index.max { |a,b| a[0][:length] <=> b[0][:length] }[1]
-      green("Autopicked title #{title}, duration = #{(Time.utc(2000) + title_map[title][:length]).strftime("%H:%M:%S")}")
+      title = disk.title_map.each_with_index.max { |a,b| a[0][:length] <=> b[0][:length] }[1]
+      green("Autopicked title #{title}, duration = #{(Time.utc(2000) + disk.title_map[title][:length]).strftime("%H:%M:%S")}")
     else
       title = d["title"]
     end
@@ -694,7 +741,7 @@ begin
     
     track_names.delete_if { |t| tracks_done.has_key?(t[:name]) }
     tracks += track_names.map { |t|
-      Track.new(outdir, type, project["size"], title_map[t[:title]][:vts], title_map[t[:title]][:pgc], t[:name], 
+      Track.new(outdir, type, project["size"], t[:title], t[:name], 
         disk, video_stream, audio_streams, sub_streams) }
   end
 

@@ -3,11 +3,14 @@ tempdir: D:\TEMPRIP
 outdir: D:\DVD2
 bitrate: 1200
 audio:
-- English
+  English: 1
+  Français: 0
 sub:
-- English
+  English: 0
+  Français: 1
 disk:
 - image: E
   name: Secretary
   type: interlaced
 ---
+- image: D:\Users\hanh\Documents\BACK_TO_THE_FUTURE.ISO
