@@ -442,44 +442,46 @@ private
   end
   
   def timecorrect
-    delays = []
-    File.open("#{@track.tempdir}\\VTS_#{'%02d' % @track.vts}.IDX", "r") do |f|
-      look_for_id = true
-      id = -1
-      ts = nil
-      while line = f.gets
-        if look_for_id && line =~ /index: (\d+)/ then
-          id = $1.to_i
-          look_for_id = false
-        elsif !look_for_id && line =~ /timestamp: (-?)(\d+):(\d+):(\d+):(\d+)/ then
-          sign = $1.empty? ? 1 : -1
-          ts_idx = Time.utc(2000, 1, 1, sign * $2.to_i, sign * $3.to_i, sign * $4.to_i, sign * $5.to_i * 1000)
-          s = @sub_streams.find { |s| s.id == id }
-          s.info =~ /PTS: (\d+):(\d+):(\d+)\.(\d+)/
-          ts_stream = Time.utc(2000, 1, 1, $1.to_i, $2.to_i, $3.to_i, $4.to_i * 1000)
-          delay = ts_idx - ts_stream
-          sign = delay <=> 0
-          delay = delay.abs
-          delay = Time.utc(2000) + delay
-          delay = (sign < 0 ? "-" : "" ) + "#{delay.strftime("%H:%M:%S")}:#{delay.usec / 1000}"
-          delays[id] = delay
-          look_for_id = true
-        end
-      end
-    end
-
     path = "#{@track.tempdir}\\VTS_#{'%02d' % @track.vts}"
-    File.open("#{path}-fix.IDX", "w") do |fw|
-      File.foreach("#{path}.IDX") do |line|
-        fw.puts line
-        if line =~ /index: (\d+)/ then
-          id = $1.to_i
-          fw.puts "delay: #{delays[id]}"
+    make_file("#{path}-fix.idx") do
+      delays = []
+      File.open("#{@track.tempdir}\\VTS_#{'%02d' % @track.vts}.IDX", "r") do |f|
+        look_for_id = true
+        index = -1
+        ts = nil
+        while line = f.gets
+          if look_for_id && line =~ /index: (\d+)/ then
+            index = $1.to_i
+            look_for_id = false
+          elsif !look_for_id && line =~ /timestamp: (-?)(\d+):(\d+):(\d+):(\d+)/ then
+            sign = $1.empty? ? 1 : -1
+            ts_idx = Time.utc(2000, 1, 1, sign * $2.to_i, sign * $3.to_i, sign * $4.to_i, sign * $5.to_i * 1000)
+            s = @sub_streams.find { |s| s.index == index }
+            s.info =~ /PTS: (\d+):(\d+):(\d+)\.(\d+)/
+            ts_stream = Time.utc(2000, 1, 1, $1.to_i, $2.to_i, $3.to_i, $4.to_i * 1000)
+            delay = ts_idx - ts_stream
+            sign = delay <=> 0
+            delay = delay.abs
+            delay = Time.utc(2000) + delay
+            delay = (sign < 0 ? "-" : "" ) + "#{delay.strftime("%H:%M:%S")}:#{delay.usec / 1000}"
+            delays[index] = delay
+            look_for_id = true
+          end
         end
       end
+
+      File.open("#{path}-fix.IDX", "w") do |fw|
+        File.foreach("#{path}.IDX") do |line|
+          fw.puts line
+          if line =~ /index: (\d+)/ then
+            index = $1.to_i
+            fw.puts "delay: #{delays[index]}"
+          end
+        end
+      end
+      
+      FileUtils.cp "#{path}.SUB", "#{path}-fix.SUB"
     end
-    
-    FileUtils.cp "#{path}.SUB", "#{path}-fix.SUB"
   end
 end
 
@@ -600,7 +602,7 @@ class Track
 
     best_audio = aud_streams.min { |a,b| a.stream.priority <=> b.stream.priority }
     aud_streams = aud_streams.delete_if { |a| a.stream.priority > best_audio.stream.priority }
-    max_channels = aud_streams.max { |a| a.channels }
+    max_channels = aud_streams.max { |a,b| a.channels <=> b.channels }
     @streams = aud_streams.delete_if { |a| a.channels < max_channels.channels }
     best_sub = sub_streams.min { |a,b| a.stream.priority <=> b.stream.priority }
     sub_streams = sub_streams.delete_if { |a| a.stream.priority > best_sub.stream.priority }
