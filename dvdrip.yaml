@@ -1,16 +1,20 @@
 x264preset: slower
-tempdir: D:\TEMPRIP
-outdir: D:\DVD2
+tempdir: E:\TEMPRIP
+outdir: I:\DVD
 bitrate: 1200
 audio:
-  English: 1
-  Français: 0
+  English: 0
+  Français: 1
 sub:
   English: 0
   Français: 1
 disk:
-- image: E
-  name: Secretary
-  type: interlaced
+- image: H
+  name: Test
+  title: 4
+  episode: 3
+  tracks:
+  - Test
 ---
 - image: D:\Users\hanh\Documents\BACK_TO_THE_FUTURE.ISO
+shutdown: true

@@ -384,7 +384,7 @@ class SubtitleStream < Stream
   end
 
   def mux(mux_index)
-    lang = @track.disk.title_map[@track.title][:audio_langcode][@index]
+    lang = @track.disk.title_map[@track.title][:sub_langcode][@index]
     "--language #{mux_index}:#{lang}"
   end
 end
@@ -397,17 +397,16 @@ class VobSubStream < Stream
   
   def encode
     vobsubrip
-    timecorrect
     @track.size -= size unless @track.size.nil?
   end
   
   def size
-    path = "#{@track.tempdir}\\\VTS_#{'%02d' % @track.vts}-fix.SUB"
+    path = "#{@track.tempdir}\\\VTS_#{'%02d' % @track.vts}.SUB"
     File.size(path)
   end
   
   def mux
-    path = "#{@track.tempdir}\\\VTS_#{'%02d' % @track.vts}-fix.IDX"
+    path = "#{@track.tempdir}\\\VTS_#{'%02d' % @track.vts}.IDX"
     x = @sub_streams.zip(0...@sub_streams.length)
     arg = x.map { |a| a[0].mux(a[1]) }.join(' ')
     arg + " -s #{(0...@sub_streams.length).to_a.join(',')} -D -A -T \"#{path}\""
@@ -431,57 +430,14 @@ private
         f.puts "#{path}_0.IFO"
         f.puts "#{path}"
         f.puts @track.pgc
-        f.puts 0
-        f.puts @sub_streams.map { |s| "#{s.id}" }.join(' ')
+        f.puts 1
+        f.puts @sub_streams.map { |s| "#{s.index}" }.join(' ')
         f.puts 'CLOSE'
         end
         
       vobsub_cmd = "rundll32.exe vobsub.dll,Configure #{vobsub_param}"
       %x{#{vobsub_cmd}}
     }
-  end
-  
-  def timecorrect
-    path = "#{@track.tempdir}\\VTS_#{'%02d' % @track.vts}"
-    make_file("#{path}-fix.idx") do
-      delays = []
-      File.open("#{@track.tempdir}\\VTS_#{'%02d' % @track.vts}.IDX", "r") do |f|
-        look_for_id = true
-        index = -1
-        ts = nil
-        while line = f.gets
-          if look_for_id && line =~ /index: (\d+)/ then
-            index = $1.to_i
-            look_for_id = false
-          elsif !look_for_id && line =~ /timestamp: (-?)(\d+):(\d+):(\d+):(\d+)/ then
-            sign = $1.empty? ? 1 : -1
-            ts_idx = Time.utc(2000, 1, 1, sign * $2.to_i, sign * $3.to_i, sign * $4.to_i, sign * $5.to_i * 1000)
-            s = @sub_streams.find { |s| s.index == index }
-            s.info =~ /PTS: (\d+):(\d+):(\d+)\.(\d+)/
-            ts_stream = Time.utc(2000, 1, 1, $1.to_i, $2.to_i, $3.to_i, $4.to_i * 1000)
-            delay = ts_idx - ts_stream
-            sign = delay <=> 0
-            delay = delay.abs
-            delay = Time.utc(2000) + delay
-            delay = (sign < 0 ? "-" : "" ) + "#{delay.strftime("%H:%M:%S")}:#{delay.usec / 1000}"
-            delays[index] = delay
-            look_for_id = true
-          end
-        end
-      end
-
-      File.open("#{path}-fix.IDX", "w") do |fw|
-        File.foreach("#{path}.IDX") do |line|
-          fw.puts line
-          if line =~ /index: (\d+)/ then
-            index = $1.to_i
-            fw.puts "delay: #{delays[index]}"
-          end
-        end
-      end
-      
-      FileUtils.cp "#{path}.SUB", "#{path}-fix.SUB"
-    end
   end
 end
 
