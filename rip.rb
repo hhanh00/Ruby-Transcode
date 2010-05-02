@@ -3,18 +3,22 @@ require 'WIN32OLE'
 require "fileutils"
 require "yaml"
 
+# Output text in red
 def red(text)
     puts "\033[0;31;40m#{text}\033[0m"
 end
 
+# Output text in green
 def green(text)
     puts "\033[0;32;40m#{text}\033[0m"
 end
 
+# Output text in cyan
 def cyan(text)
     puts "\033[0;36;40m#{text}\033[0m"
 end
 
+# Read and merge both config files
 def read_config
   config = YAML::load_file('config.yaml')
   project = YAML::load_file('dvdrip.yaml')
@@ -24,6 +28,7 @@ end
 
 project = read_config()
 
+# Read global settings
 $x264preset = project["x264preset"]
 $tempdir = project["tempdir"]
 $clonedrivePath = project["clonedrive"]["path"]
@@ -52,6 +57,7 @@ class Crop
   end
 end
 
+# Video settings
 class Video
   attr_accessor :crop
   attr_reader :bitrate, :dx, :dy, :autocrop
@@ -69,6 +75,7 @@ class Video
   end
 end
 
+# Audio settings
 class Audio
   attr_reader :language, :priority
   def initialize(language, priority)
@@ -80,6 +87,7 @@ class Audio
   end
 end
 
+# Subtitle settings
 class Sub
   attr_reader :language, :priority
   def initialize(language, priority)
@@ -114,7 +122,8 @@ class Disk
       $last_mounted = @image
     end
   end
-  
+
+  # Get the duration of a VTS/PGC
   def parse_len(vts, pgc)
     path = "#{@drive_letter}:\\VIDEO_TS\\VTS_#{'%02d' % vts}_0.IFO"
     File::open(path, 'r') do |f|
@@ -131,6 +140,7 @@ class Disk
     end
   end
   
+  # Read the audio language codes of a VTS/PGC
   def parse_audio_langcode(vts, pgc)
     path = "#{@drive_letter}:\\VIDEO_TS\\VTS_#{'%02d' % vts}_0.IFO"
     langcode = []
@@ -146,6 +156,7 @@ class Disk
     langcode
   end
 
+  # Read the subtitle language codes of a VTS/PGC
   def parse_sub_langcode(vts, pgc)
     path = "#{@drive_letter}:\\VIDEO_TS\\VTS_#{'%02d' % vts}_0.IFO"
     langcode = []
@@ -161,6 +172,8 @@ class Disk
     langcode
   end
 
+  # Parse the Video Manager Group of a disk
+  # Fill the title_map table
   def parse_vmg
     green("Parsing Video Manager IFO")
     path = "#{@drive_letter}:\\VIDEO_TS\\VIDEO_TS.IFO"
@@ -186,12 +199,15 @@ class Disk
   end
 end
 
+# Base class of the track streams
 class Stream
   attr_reader :id, :index, :info, :stream
   attr_accessor :mux_index
   def initialize(track, id, index, info, stream)
     @track = track
+    # Stream id
     @id = id
+    # Index of this stream among streams of the same type
     @index = index
     @info = info
     @stream = stream
@@ -201,6 +217,7 @@ class Stream
   end
   
   def track_list
+    # Stream position in the muxed file
     "#{@mux_index}:0"
   end
 end
@@ -233,6 +250,7 @@ class AudioStream < Stream
   end
   
   def merit
+    # Keep original stream order among audio files
     1 + Integer(@id).to_f / 1000
   end
 end
@@ -326,7 +344,8 @@ EOS
     end
     green("Video bitrate = #{@bitrate}")
   end
-  
+
+  # Create keyframes on chapter points
   def qpfile
     ts_ref = Time.utc(2000)
     path = "#{@path} - Chapter Information - OGG - fix.txt"
@@ -341,6 +360,7 @@ EOS
     end
   end
   
+  # For 64 bit X264, pipe through avs2yuv
   def run_x264_64(x264_opt)
     avs2yuv_cmd = "\"#{$meguiPath}\\tools\\x264\\avs2yuv.exe\" #{@path}.avs -o -"
     x264_cmd = "\"#{$meguiPath}\\tools\\x264\\x264_64.exe\" - --stdin y4m #{x264_opt}"
@@ -380,6 +400,7 @@ EOS
   end
 end
 
+# Subtitle Streams are contained in a VobSubStream
 class SubtitleStream < Stream
   def initialize(track, id, index, info, stream)
     super track, id, index, info, stream
@@ -409,6 +430,7 @@ class VobSubStream < Stream
   
   def mux
     path = "#{@track.tempdir}\\\VTS_#{'%02d' % @track.vts}.IDX"
+    # Mux contained subtitle streams
     x = @sub_streams.zip(0...@sub_streams.length)
     arg = x.map { |a| a[0].mux(a[1]) }.join(' ')
     arg + " -s #{(0...@sub_streams.length).to_a.join(',')} -D -A -T \"#{path}\""
@@ -424,6 +446,7 @@ class VobSubStream < Stream
   
 private
   def vobsubrip
+    # Run VobSub to rip all requested subtitle streams
     make_file("#{@track.tempdir}\\VTS_#{'%02d' % @track.vts}.idx") {
       green("Extracting subtitles")
       vobsub_param = "#{@track.tempdir}\\vobsub.txt"
@@ -451,6 +474,10 @@ class ChapterStream < Stream
   end
   
   def encode
+    # Delay by 0.1% to account for drop frame
+    # The fps on NTSC disks is not 30 fps but 30/1.001 fps (29.97)
+    # Same thing for IVTC
+    # Not sure it makes a bit difference though
     File.open("#{@path} - fix.txt", "w") do |fw|
       File.foreach("#{@path}.txt") do |line|
         if line =~ /(CHAPTER\d+)=(\d+):(\d+):(\d+)\.(\d+)/ then
@@ -476,6 +503,7 @@ class ChapterStream < Stream
   end
 end
 
+# Track is an output file
 class Track
   attr_reader :tempdir, :title, :vts, :pgc, :name, :disk, :video_stream, :audio_streams, :sub_streams,
     :fps, :ivtc, :interlaced, :logfile
@@ -521,6 +549,7 @@ class Track
     }
   end
   
+  # Parse the Stream Information file output by DVD Decrypter
   def parse_stream_file
     green("Parsing stream info file")
     @streams = []
@@ -562,10 +591,14 @@ class Track
       end
     end
 
+    # Take all the audio streams that have the lowest priority number
     best_audio = aud_streams.min { |a,b| a.stream.priority <=> b.stream.priority }
     aud_streams = aud_streams.delete_if { |a| a.stream.priority > best_audio.stream.priority }
+    # Keep only the ones that have the highest number of channels
     max_channels = aud_streams.max { |a,b| a.channels <=> b.channels }
     @streams = aud_streams.delete_if { |a| a.channels < max_channels.channels }
+    
+    # Take all the subtitle streams that have the lowest priority number
     best_sub = sub_streams.min { |a,b| a.stream.priority <=> b.stream.priority }
     sub_streams = sub_streams.delete_if { |a| a.stream.priority > best_sub.stream.priority }
     @streams << VobSubStream.new(self, sub_streams) if sub_streams.length != 0
@@ -595,6 +628,7 @@ class Track
     }
   end
   
+  # Based on the video type, set the FPS and the frame type
   def set_video_type
     @type = parse_demux_log if @type == "auto" && File.exists?("#{@tempdir}\\VTS_#{'%02d' % @vts}_1.log")
     case @type
@@ -613,6 +647,7 @@ class Track
     end
   end
   
+  # Parse the DGIndex log and guess the video type
   def parse_demux_log
     film_percent = 0
     progressive = false
@@ -635,6 +670,7 @@ class Track
   end
   
   def mux
+    # Order the streams by mux merit
     mux_streams = @streams.clone
     mux_streams.delete_if { |s| s.merit < 0 }
     mux_streams.each_with_index { |s,i| s.mux_index = i }
@@ -649,6 +685,8 @@ class Track
   end
 end
 
+# Execute the block creates the file
+# If aborted, deletes the file before exiting
 def make_file(file)
   return if File.exists?(file)
   begin
@@ -663,8 +701,9 @@ end
 TrackDoneFileName = 'tracks-done.yaml'
 
 shutdown = false
+# Loop until there is no more work
 begin 
-  disk_index = 0
+  # Read the tracks that are already done
   tracks_done = File.exist?(TrackDoneFileName) ? YAML::load(File.read(TrackDoneFileName)) : {}
   more_work = false
   project = read_config()
@@ -677,6 +716,9 @@ begin
   video_stream = Video.new(c, project["bitrate"])
   audio_streams = project["audio"].map { |lang, priority| Audio.new(lang, priority) }
   sub_streams = project["sub"].map { |lang, priority| Sub.new(lang, priority) }
+  
+  # Collect all tracks
+  disk_index = 0
   project["disk"].each do |d| 
     disk_index += 1
     disk = Disk.new(d["image"], disk_index)
@@ -705,22 +747,23 @@ begin
       end
     end
     
+    # Skip track if done
     track_names.delete_if { |t| tracks_done.has_key?(t[:name]) }
     tracks += track_names.map { |t|
       Track.new(outdir, type, project["size"], t[:title], t[:name], 
         disk, video_stream, audio_streams, sub_streams) }
   end
 
+  # Process all tracks
   tracks.each do |t| 
     more_work = true
     t.run
     tracks_done[t.name] = true
     File.open(TrackDoneFileName, 'w') { |f| YAML::dump(tracks_done, f) }
   end
-
 end while more_work
+
 if shutdown then
   shutdown_cmd = "psshutdown -s"
   %x{#{shutdown_cmd}}
 end
-
