@@ -345,11 +345,13 @@ EOS
     avs2yuv_cmd = "\"#{$meguiPath}\\tools\\x264\\avs2yuv.exe\" #{@path}.avs -o -"
     x264_cmd = "\"#{$meguiPath}\\tools\\x264\\x264_64.exe\" - --stdin y4m #{x264_opt}"
     cmd = "\"#{$meguiPath}\\tools\\x264\\pipebuf.exe\" #{avs2yuv_cmd} : #{x264_cmd} : 0"
+    @track.logfile.puts cmd
     %x{#{cmd}}
   end
   
   def run_x264_32(x264_opt)
     x264_cmd = "\"#{$meguiPath}\\tools\\x264\\x264.exe\" #{x264_opt} #{@path}.avs"
+    @track.logfile.puts x264_cmd
     %x{#{x264_cmd}}
   end
   
@@ -436,6 +438,7 @@ private
         end
         
       vobsub_cmd = "rundll32.exe vobsub.dll,Configure #{vobsub_param}"
+      @track.logfile.puts vobsub_cmd
       %x{#{vobsub_cmd}}
     }
   end
@@ -475,7 +478,7 @@ end
 
 class Track
   attr_reader :tempdir, :title, :vts, :pgc, :name, :disk, :video_stream, :audio_streams, :sub_streams,
-    :fps, :ivtc, :interlaced
+    :fps, :ivtc, :interlaced, :logfile
   attr_accessor :type, :size
   
   def initialize(outdir, type, size, title, name, disk, video_stream, audio_streams, sub_streams)
@@ -492,11 +495,13 @@ class Track
     @size = size && size * 1024 * 1024
     @tempdir = "#{$tempdir}\\#{@disk.ord}.#{@vts}.#{@pgc}"
     @path = "#{@tempdir}\\VTS_#{'%02d' % @vts}"
+    FileUtils.mkdir_p("#{@tempdir}")
+    @logfile = File.open("#{@tempdir}\\commands.log", "a")
+    @logfile.puts Time.new().asctime
   end
   
   def run
     red("Processing #{@name}")
-    FileUtils.mkdir_p("#{@tempdir}")
     File.open("#{@tempdir}\\readme.txt", "w") { |f| f.puts "#{@name}" }
     @disk.mount
     decrypt
@@ -511,6 +516,7 @@ class Track
     make_file ("#{@tempdir}\\VTS_#{'%02d' % @vts}_0.IFO") {
       green("Decrypting")
       decrypt_cmd = "\"#{$decrypterPath}\" /SRC #{@disk.drive_letter}: /DEST \"#{@tempdir}\" /VTS #{@vts} /PGC #{@pgc} /MODE IFO /START /CLOSE"
+      @logfile.puts decrypt_cmd
       %x{#{decrypt_cmd}}
     }
   end
@@ -578,6 +584,7 @@ class Track
       path = "#{@path}_1"
       while true
         demux_cmd = "\"#{$demuxPath}\" -i \"#{path}.VOB\" -o \"#{path}\" -fo #{@ivtc ? 1 : 0} -exit"
+        @logfile.puts demux_cmd
         %x{#{demux_cmd}}
         if @type == 'auto' then
           set_video_type 
@@ -636,6 +643,7 @@ class Track
     make_file(path) {
       green("Remuxing")
       mux_cmd = "\"#{$mkvmergePath}\" -o \"#{path}\" " + @streams.map { |s| s.mux }.join(' ') + " --track-order \"#{track_order}\""
+      @logfile.puts mux_cmd
       %x{#{mux_cmd}}
     }
   end
@@ -654,9 +662,9 @@ end
 
 TrackDoneFileName = 'tracks-done.yaml'
 
-disk_index = 0
 shutdown = false
 begin 
+  disk_index = 0
   tracks_done = File.exist?(TrackDoneFileName) ? YAML::load(File.read(TrackDoneFileName)) : {}
   more_work = false
   project = read_config()
