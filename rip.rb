@@ -1,3 +1,4 @@
+require 'choice'
 require 'Win32/Console/ANSI'
 require 'WIN32OLE'
 require "fileutils"
@@ -26,6 +27,15 @@ def read_config
   project
 end
 
+Choice.options do
+  option :clean do
+    short '-c'
+    long '--clean'
+    desc 'Delete temporary files before processing'
+    default false
+  end
+end
+  
 project = read_config()
 
 # Read global settings
@@ -523,13 +533,13 @@ class Track
     @size = size && size * 1024 * 1024
     @tempdir = "#{$tempdir}\\#{@disk.ord}.#{@vts}.#{@pgc}"
     @path = "#{@tempdir}\\VTS_#{'%02d' % @vts}"
-    FileUtils.mkdir_p("#{@tempdir}")
-    @logfile = File.open("#{@tempdir}\\commands.log", "a")
-    @logfile.puts Time.new().asctime
   end
   
   def run
     red("Processing #{@name}")
+    FileUtils.mkdir_p("#{@tempdir}")
+    @logfile = File.open("#{@tempdir}\\commands.log", "a")
+    @logfile.puts Time.new().asctime
     File.open("#{@tempdir}\\readme.txt", "w") { |f| f.puts "#{@name}" }
     @disk.mount
     decrypt
@@ -698,6 +708,11 @@ def make_file(file)
   end
 end
 
+if Choice.choices[:clean] then
+  FileUtils.rmtree $tempdir
+  sleep 5
+end
+  
 TrackDoneFileName = 'tracks-done.yaml'
 
 shutdown = false
