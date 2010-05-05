@@ -158,7 +158,7 @@ class Disk
       f.seek(0x200)
       x = f.read(0x100)
       num_audio_streams = x[2...4].unpack('n').first
-      (0..num_audio_streams).each do |i|
+      (0...num_audio_streams).each do |i|
         beg = 6 + i * 8
         langcode << x[beg...beg+2]
         end
@@ -174,7 +174,7 @@ class Disk
       f.seek(0x200)
       x = f.read(0x200)
       num_audio_streams = x[0x54...0x56].unpack('n').first
-      (0..num_audio_streams).each do |i|
+      (0...num_audio_streams).each do |i|
         beg = 0x58 + i * 6
         langcode << x[beg...beg+2]
         end
@@ -412,12 +412,13 @@ end
 
 # Subtitle Streams are contained in a VobSubStream
 class SubtitleStream < Stream
-  def initialize(track, id, index, info, stream)
+  def initialize(track, id, sup_index, index, info, stream)
     super track, id, index, info, stream
+    @sup_index = sup_index
   end
 
   def mux(mux_index)
-    lang = @track.disk.title_map[@track.title][:sub_langcode][@index]
+    lang = @track.disk.title_map[@track.title][:sub_langcode][@sup_index]
     "--language #{mux_index}:#{lang}"
   end
 end
@@ -566,7 +567,8 @@ class Track
     aud_streams = []
     sub_streams = []
     audio_index = 0
-    sub_index = 0
+    substream_index = 0
+    sup_index_set = []
     max_channels = 0
     video = nil
     File.open("#{@tempdir}\\VTS_#{'%02d' % @vts} - Stream Information.txt", "r:ISO-8859-1") do |f|
@@ -577,9 +579,14 @@ class Track
         when "Subtitle"
           info =~ /(\w+)/
           language = $1
-          t = @sub_streams.find { |t| t.language == language }
-          sub_streams << SubtitleStream.new(self, id, sub_index, info, t) if t
-          sub_index += 1
+          info =~ /SubPicture (\d+)/
+          sup_index = $1.to_i - 1
+          if sup_index_set[sup_index].nil? then
+            sup_index_set[sup_index] = true
+            t = @sub_streams.find { |t| t.language == language }
+            sub_streams << SubtitleStream.new(self, id, sup_index, substream_index, info, t) if t
+          end
+          substream_index += 1
         when "Audio"
           info = info.split(' / ', 8)
           codec = info[0]
