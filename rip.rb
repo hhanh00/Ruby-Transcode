@@ -195,6 +195,8 @@ class Disk
       f.seek(offset_of_srpt * 0x800)
       x = f.read(0x200)
       titles = x[0...2].unpack('n').first
+      f.seek(offset_of_srpt * 0x800)
+      x = f.read(0x100 + titles * 12)
       offset = 8
       (1..titles).each do |i| 
         a = x.slice(offset, 12).unpack("ccnnccN")
@@ -554,7 +556,7 @@ class Track
   def decrypt
     make_file ("#{@tempdir}\\VTS_#{'%02d' % @vts}_0.IFO") {
       green("Decrypting")
-      decrypt_cmd = "\"#{$decrypterPath}\" /SRC #{@disk.drive_letter}: /DEST \"#{@tempdir}\" /VTS #{@vts} /PGC #{@pgc} /MODE IFO /START /CLOSE"
+      decrypt_cmd = "\"#{$decrypterPath}\" /SRC #{@disk.drive_letter}: /DEST \"#{@tempdir}\" /VTS #{@vts} /PGC #{@pgc} /ANGLE 1 /MODE IFO /START /CLOSE"
       @logfile.puts decrypt_cmd
       %x{#{decrypt_cmd}}
     }
@@ -716,6 +718,8 @@ def make_file(file)
 end
 
 if Choice.choices[:clean] then
+  red("CLEANING ALL TEMPORARY DATA... Last chance to interrupt")
+  sleep 10
   FileUtils.rmtree $tempdir
   sleep 5
 end
