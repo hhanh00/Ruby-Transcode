@@ -745,6 +745,8 @@ begin
   
   # Collect all tracks
   disk_index = 0
+  episode = nil
+  season = nil
   project["disk"].each do |d| 
     disk_index += 1
     disk = Disk.new(d["image"], disk_index)
@@ -758,8 +760,8 @@ begin
     else
       title = d["title"]
     end
-    season = d["season"] || 1
-    episode = d["episode"] || 1
+    season ||= d["season"] || 1
+    episode ||= d["episode"] || 1
     type = d["type"] || "auto"
     track_names = []
     if d["tracks"].nil? then
@@ -780,6 +782,8 @@ begin
         disk, video_stream, audio_streams, sub_streams) }
   end
 
+  tracks.each { |t| puts t.name }
+  
   # Process all tracks
   tracks.each do |t| 
     more_work = true
