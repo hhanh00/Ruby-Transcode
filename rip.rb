@@ -285,6 +285,8 @@ class VideoStream < Stream
     make_file ("#{@path}.264") {
       encode2
     }
+    @ac.ole_free
+    @ac = nil
   end
   
   def round_to(x, prec)
@@ -550,6 +552,7 @@ class Track
     parse_stream_file
     encode
     mux
+    @logfile.close
     cyan("Finished processing #{@name}")
   end
   
@@ -747,12 +750,13 @@ begin
   disk_index = 0
   episode = nil
   season = nil
+  name = nil
   project["disk"].each do |d| 
     disk_index += 1
     disk = Disk.new(d["image"], disk_index)
     disk.mount
     disk.parse_vmg
-    name = d["name"]
+    name = d["name"] || name
     raise "Invalid character in #{name}" if name =~ /[\\\/:\*\?"<>|]/
     if d["title"].nil? then
       title = disk.title_map.each_with_index.max { |a,b| a[0][:length] <=> b[0][:length] }[1]
@@ -760,8 +764,8 @@ begin
     else
       title = d["title"]
     end
-    season ||= d["season"] || 1
-    episode ||= d["episode"] || 1
+    season = d["season"] || season || 1
+    episode = d["episode"] || episode || 1
     type = d["type"] || "auto"
     track_names = []
     if d["tracks"].nil? then
