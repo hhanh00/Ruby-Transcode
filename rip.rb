@@ -1,3 +1,4 @@
+require 'titleizer'
 require 'choice'
 require 'Win32/Console/ANSI'
 require 'WIN32OLE'
@@ -747,16 +748,31 @@ begin
   sub_streams = project["sub"].map { |lang, priority| Sub.new(lang, priority) }
   
   # Collect all tracks
+  disks = []
+  project_dir = project["directory"]
+  if !project_dir.nil? then
+    dir = project_dir.gsub('\\', '/').upcase + '/*.ISO'
+    images = Dir.glob(dir)
+    images.sort! { |f,g| File.new(f).ctime <=> File.new(g).ctime }
+    disks = images.map { |f| {'image' => "#{f.upcase}"} }
+  end
+  disks = disks.concat project["disk"] unless project["disk"].nil?
   disk_index = 0
   episode = nil
   season = nil
   name = nil
-  project["disk"].each do |d| 
+  disks.each do |d| 
     disk_index += 1
     disk = Disk.new(d["image"], disk_index)
     disk.mount
     disk.parse_vmg
-    name = d["name"] || name
+    if d["name"].nil? then
+      d["image"] =~ /((\w|_)+)\.ISO/
+      image_name = $1
+      name = image_name.downcase.titleize
+    else
+      name = d["name"]
+    end
     raise "Invalid character in #{name}" if name =~ /[\\\/:\*\?"<>|]/
     if d["title"].nil? then
       title = disk.title_map.each_with_index.max { |a,b| a[0][:length] <=> b[0][:length] }[1]
