@@ -767,7 +767,7 @@ begin
     disk.mount
     disk.parse_vmg
     if d["name"].nil? then
-      d["image"] =~ /((\w|_)+)\.ISO/
+      d["image"] =~ /((\w|_|\s)+)\.ISO/
       image_name = $1
       name = image_name.downcase.titleize
     else
