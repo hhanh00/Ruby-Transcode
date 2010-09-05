@@ -678,8 +678,8 @@ class Track
       if line =~ /Video Type: Film( (\d+(\.\d+)?)%)?/ then
         film_percent = $1.nil? ? 100 : $2.to_f
       end
-      if line == "Frame Type: Progressive" then
-        progressive = true
+	  if line =~ /Frame Type: (\w+)/ then
+		progressive = $1 == "Progressive"
       end
     end
     if film_percent >= 95 then 
@@ -689,6 +689,7 @@ class Track
     else
       type = "interlaced"
     end
+	green("Film type is #{type}")
     type
   end
   
