@@ -280,6 +280,11 @@ class VideoStream < Stream
     avs
     autobitrate
     qpfile
+    if @track.hybrid then
+      make_file ("#{@track.tempdir}\\tfm.txt") {
+        encode0 
+      }
+    end
     make_file ("#{@path}.stats") {
       encode1
     }
@@ -422,11 +427,6 @@ EOS
   end
   
   def encode1
-    if @track.hybrid then
-      make_file ("#{@track.tempdir}\\tfm.txt") {
-        encode0 
-      }
-    end
     green("Video encoding - pass 1")
     path = "#{@track.tempdir}\\VTS_#{'%02d' % @track.vts}"
     x264_opt = "--profile high --sar #{@track.video_stream.dx}:#{@track.video_stream.dy} --preset #{$x264preset} " +
