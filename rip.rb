@@ -299,7 +299,8 @@ class VideoStream < Stream
     vs = @track.video_stream
     c = vs.crop
     ar = round_to((720 - c.left - c.right ).to_f / (480 - c.top - c.bottom) * vs.dx / vs.dy, 0.01)
-    "--default-duration 0:#{@track.fps}000/1001fps --aspect-ratio 0:#{ar} " +
+    (@track.hybrid ? " --timecodes \"0:#{@track.tempdir}\\timecodes.txt\"" : "--default-duration 0:#{@track.fps}000/1001fps") +
+    " --aspect-ratio 0:#{ar} " +
     "-d 0 -A -S -T \"#{path}\""
   end
   
@@ -348,6 +349,7 @@ EOS
         w.puts "crop(#{c.left}, #{c.top}, -#{c.right}, -#{c.bottom})"
       end
     end
+    @avs_name = @track.hybrid ? "#{@path}-pass1.avs" : path_avs
   end
   
   def autobitrate
@@ -377,7 +379,7 @@ EOS
   
   # For 64 bit X264, pipe through avs2yuv
   def run_x264_64(x264_opt)
-    avs2yuv_cmd = "\"#{$meguiPath}\\tools\\x264\\avs2yuv.exe\" #{@path}.avs -o -"
+    avs2yuv_cmd = "\"#{$meguiPath}\\tools\\x264\\avs2yuv.exe\" #{@avs_name} -o -"
     x264_cmd = "\"#{$meguiPath}\\tools\\x264\\x264_64.exe\" - --stdin y4m #{x264_opt}"
     cmd = "\"#{$meguiPath}\\tools\\x264\\pipebuf.exe\" #{avs2yuv_cmd} : #{x264_cmd} : 0"
     @track.logfile.puts cmd
@@ -385,12 +387,46 @@ EOS
   end
   
   def run_x264_32(x264_opt)
-    x264_cmd = "\"#{$meguiPath}\\tools\\x264\\x264.exe\" #{x264_opt} #{@path}.avs"
+    x264_cmd = "\"#{$meguiPath}\\tools\\x264\\x264.exe\" #{x264_opt} #{@avs_name}"
     @track.logfile.puts x264_cmd
     %x{#{x264_cmd}}
   end
   
+  def encode0
+    green("Video encoding - pass 0")
+    
+    path_avs = "#{@path}.avs"
+    path_avs0 = "#{@path}-pass0.avs"
+    File.open(path_avs0, 'w') do |w|
+      File.foreach(path_avs) do |line|
+        w.puts line
+      end
+      w.puts "LoadPlugin(\"#{$meguiPath}\\tools\\avisynth_plugin\\TIVTC.dll\")"
+      w.puts "TFM(mode=1, output=\"tfm.txt\")"
+      w.puts "TDecimate(mode=4, output=\"stats.txt\")"
+    end
+    
+    path_avs = "#{@path}.avs"
+    path_avs1 = "#{@path}-pass1.avs"
+    File.open(path_avs1, 'w') do |w|
+      File.foreach(path_avs) do |line|
+        w.puts line
+      end
+      w.puts "LoadPlugin(\"#{$meguiPath}\\tools\\avisynth_plugin\\TIVTC.dll\")"
+      w.puts "TFM(mode=1)"
+      w.puts "TDecimate(mode=5, hybrid=2, dupthresh=1.0, input=\"stats.txt\", tfmin=\"tfm.txt\", mkvout=\"timecodes.txt\")"
+    end
+
+    avs2yuv_cmd = "\"#{$meguiPath}\\tools\\x264\\avs2yuv.exe\" #{@path}-pass0.avs -o nul"
+    %x{#{avs2yuv_cmd}}
+  end
+  
   def encode1
+    if @track.hybrid then
+      make_file ("#{@track.tempdir}\\tfm.txt") {
+        encode0 
+      }
+    end
     green("Video encoding - pass 1")
     path = "#{@track.tempdir}\\VTS_#{'%02d' % @track.vts}"
     x264_opt = "--profile high --sar #{@track.video_stream.dx}:#{@track.video_stream.dy} --preset #{$x264preset} " +
@@ -522,7 +558,7 @@ end
 # Track is an output file
 class Track
   attr_reader :tempdir, :title, :vts, :pgc, :name, :disk, :video_stream, :audio_streams, :sub_streams,
-    :fps, :ivtc, :interlaced, :logfile
+    :fps, :ivtc, :interlaced, :hybrid, :logfile
   attr_accessor :type, :size
   
   def initialize(outdir, type, size, title, name, disk, video_stream, audio_streams, sub_streams)
@@ -654,6 +690,7 @@ class Track
   # Based on the video type, set the FPS and the frame type
   def set_video_type
     @type = parse_demux_log if @type == "auto" && File.exists?("#{@tempdir}\\VTS_#{'%02d' % @vts}_1.log")
+    @hybrid = false
     case @type
       when "auto", "film"
         @fps = 24
@@ -667,6 +704,11 @@ class Track
         @fps = 30
         @ivtc = false
         @interlaced = true
+      when "hybrid"
+        @fps = 30
+        @ivtc = false
+        @interlaced = false
+        @hybrid = true
     end
   end
   
