@@ -280,7 +280,7 @@ class VideoStream < Stream
     avs
     autobitrate
     qpfile
-    if @track.hybrid then
+    if @track.type == :hybrid then
       make_file ("#{@track.tempdir}\\tfm.txt") {
         encode0 
       }
@@ -304,7 +304,7 @@ class VideoStream < Stream
     vs = @track.video_stream
     c = vs.crop
     ar = round_to((720 - c.left - c.right ).to_f / (480 - c.top - c.bottom) * vs.dx / vs.dy, 0.01)
-    (@track.hybrid ? " --timecodes \"0:#{@track.tempdir}\\timecodes.txt\"" : "--default-duration 0:#{@track.fps}000/1001fps") +
+    (@track.type == :hybrid ? " --timecodes \"0:#{@track.tempdir}\\timecodes.txt\"" : "--default-duration 0:#{@track.fps}000/1001fps") +
     " --aspect-ratio 0:#{ar} " +
     "-d 0 -A -S -T \"#{path}\""
   end
@@ -324,9 +324,14 @@ ColorMatrix(hints=true, threads=0)
 EOS
     avs_file = File.open(@path + '-precrop.avs', 'w') do |file|
       file.puts x
-      if @track.interlaced then
-        file.puts "Load_Stdcall_Plugin(\"#{$meguiPath}\\tools\\yadif\\yadif.dll\")"
-        file.puts "Yadif(order=-1)"
+      case @track.type
+        when :interlaced
+          file.puts "Load_Stdcall_Plugin(\"#{$meguiPath}\\tools\\yadif\\yadif.dll\")"
+          file.puts "Yadif(order=-1)"
+        when :ivtc
+          file.puts "LoadPlugin(\"#{$meguiPath}\\tools\\avisynth_plugin\\TIVTC.dll\")"
+          file.puts "TFM()"
+          file.puts "TDecimate()"
       end
     end
   end
@@ -354,7 +359,7 @@ EOS
         w.puts "crop(#{c.left}, #{c.top}, -#{c.right}, -#{c.bottom})"
       end
     end
-    @avs_name = @track.hybrid ? "#{@path}-pass1.avs" : path_avs
+    @avs_name = @track.type == :hybrid ? "#{@path}-pass1.avs" : path_avs
   end
   
   def autobitrate
@@ -558,7 +563,7 @@ end
 # Track is an output file
 class Track
   attr_reader :tempdir, :title, :vts, :pgc, :name, :disk, :video_stream, :audio_streams, :sub_streams,
-    :fps, :ivtc, :interlaced, :hybrid, :logfile
+    :fps, :ivtc, :interlaced, :logfile
   attr_accessor :type, :size
   
   def initialize(outdir, type, size, title, name, disk, video_stream, audio_streams, sub_streams)
@@ -675,7 +680,7 @@ class Track
       green("Demuxing")
       path = "#{@path}_1"
       while true
-        demux_cmd = "\"#{$demuxPath}\" -i \"#{path}.VOB\" -o \"#{path}\" -fo #{@ivtc ? 1 : 0} -exit"
+        demux_cmd = "\"#{$demuxPath}\" -i \"#{path}.VOB\" -o \"#{path}\" -fo #{@type == :ff ? 1 : 0} -exit"
         @logfile.puts demux_cmd
         %x{#{demux_cmd}}
         if @type == 'auto' then
@@ -690,25 +695,18 @@ class Track
   # Based on the video type, set the FPS and the frame type
   def set_video_type
     @type = parse_demux_log if @type == "auto" && File.exists?("#{@tempdir}\\VTS_#{'%02d' % @vts}_1.log")
-    @hybrid = false
+    @fps = 30
     case @type
       when "auto", "film"
         @fps = 24
-        @ivtc = true
-        @interlaced = false
-      when "progressive"
-        @fps = 30
-        @ivtc = false
-        @interlaced = false
+        @type = :ff
       when "interlaced"
-        @fps = 30
-        @ivtc = false
-        @interlaced = true
+        @type = :interlaced
+      when "ivtc"
+        @type = :ivtc
+        @fps = 24
       when "hybrid"
-        @fps = 30
-        @ivtc = false
-        @interlaced = false
-        @hybrid = true
+        @type = :hybrid
     end
   end
   
@@ -720,16 +718,11 @@ class Track
       if line =~ /Video Type: Film( (\d+(\.\d+)?)%)?/ then
         film_percent = $1.nil? ? 100 : $2.to_f
       end
-	  if line =~ /Frame Type: (\w+)/ then
-		progressive = $1 == "Progressive"
-      end
     end
     if film_percent >= 95 then 
-      type = "film" 
-    elsif progressive
-      type = "progressive"
+      type = :ff
     else
-      type = "interlaced"
+      type = :interlaced
     end
 	green("Film type is #{type}")
     type
