@@ -2,8 +2,9 @@ require 'titleizer'
 require 'choice'
 require 'Win32/Console/ANSI'
 require 'WIN32OLE'
-require "fileutils"
-require "yaml"
+require 'fileutils'
+require 'yaml'
+require 'Win32API'
 
 # Output text in red
 def red(text)
@@ -52,6 +53,7 @@ $mkvmergePath = "#{$meguiPath}\\tools\\mkvmerge\\mkvmerge.exe"
 $demuxPath = "#{$meguiPath}\\tools\\dgindex\\DGIndex.exe"
 
 $is64OS = !ENV['PROCESSOR_ARCHITEW6432'].nil?
+$rename = Win32API.new("kernel32", "MoveFile", ['PP'])
 
 $last_mounted = nil
 
@@ -566,9 +568,9 @@ class Track
     :fps, :ivtc, :interlaced, :logfile
   attr_accessor :type, :size
   
-  def initialize(outdir, type, size, title, name, disk, video_stream, audio_streams, sub_streams)
+  def initialize(outdir, video_type, size, title, name, disk, video_stream, audio_streams, sub_streams)
     @outdir = outdir
-    @type = type
+    @video_type = video_type
     @title = title
     @vts = disk.title_map[title][:vts]
     @pgc = disk.title_map[title][:pgc]
@@ -683,7 +685,7 @@ class Track
         demux_cmd = "\"#{$demuxPath}\" -i \"#{path}.VOB\" -o \"#{path}\" -fo #{@type == :ff ? 1 : 0} -exit"
         @logfile.puts demux_cmd
         %x{#{demux_cmd}}
-        if @type == 'auto' then
+        if @video_type == "auto" then
           set_video_type 
           redo if @type != "film"
         end
@@ -694,19 +696,27 @@ class Track
   
   # Based on the video type, set the FPS and the frame type
   def set_video_type
-    @type = parse_demux_log if @type == "auto" && File.exists?("#{@tempdir}\\VTS_#{'%02d' % @vts}_1.log")
-    @fps = 30
+    if @video_type == "auto" && File.exists?("#{@tempdir}\\VTS_#{'%02d' % @vts}_1.log")
+      @type = parse_demux_log
+      @video_type = nil
+    else
+      @fps = 30
+      case @video_type
+        when "auto", "film"
+          @type = :ff
+        when "interlaced"
+          @type = :interlaced
+        when "ivtc"
+          @type = :ivtc
+        when "hybrid"
+          @type = :hybrid
+      end
+    end
     case @type
-      when "auto", "film"
+      when :ff, :ivtc
         @fps = 24
-        @type = :ff
-      when "interlaced"
-        @type = :interlaced
-      when "ivtc"
-        @type = :ivtc
-        @fps = 24
-      when "hybrid"
-        @type = :hybrid
+      else
+        @fps = 30
     end
   end
   
@@ -724,7 +734,7 @@ class Track
     else
       type = :interlaced
     end
-	green("Film type is #{type}")
+    green("Film type is #{type}")
     type
   end
   
@@ -734,13 +744,46 @@ class Track
     mux_streams.delete_if { |s| s.merit < 0 }
     mux_streams.each_with_index { |s,i| s.mux_index = i }
     track_order = mux_streams.sort { |x,y| x.merit <=> y.merit }.map{ |s| s.track_list }.join(',')
-    path = "#{@outdir}\\#{@name}.mkv"
-    make_file(path) {
+    mkv_file = "#{@outdir}\\#{@name}.mkv".encode("ISO-8859-1")
+    temp_file = "#{@outdir}\\temp.mkv"
+    make_file(mkv_file) {
       green("Remuxing")
-      mux_cmd = "\"#{$mkvmergePath}\" -o \"#{path}\" " + @streams.map { |s| s.mux }.join(' ') + " --track-order \"#{track_order}\""
+      mux_cmd = "\"#{$mkvmergePath}\" -o \"#{temp_file}\" " + @streams.map { |s| s.mux }.join(' ') + " --track-order \"#{track_order}\""
       @logfile.puts mux_cmd
       %x{#{mux_cmd}}
+      $rename.Call(temp_file, mkv_file)
     }
+  end
+end
+
+class TitleList
+  def initialize(title_string)
+    @title_string = title_string
+    @title_ranges = @title_string.split(',')
+    @titles = []
+    each_title { |x| @titles << x }
+    @current = 0
+    @last = 1
+  end
+  
+  def each_title
+    @title_ranges.each do |r|
+      low, high = r.split(':').map { |x| x.to_i }
+      high = low if high.nil?
+      (low..high).each { |x| yield x }
+    end
+  end
+  
+  def next
+    if @current < @titles.length then
+      title = @titles[@current]
+      @last = title
+      @current += 1
+    else
+      @last += 1
+      title = @last
+    end
+    title
   end
 end
 
@@ -807,7 +850,7 @@ begin
       image_name = $1
       name = image_name.downcase.titleize
     else
-      name = d["name"]
+      name = d["name"].encode("ISO-8859-1")
     end
     raise "Invalid character in #{name}" if name =~ /[\\\/:\*\?"<>|]/
     if d["title"].nil? then
@@ -816,6 +859,7 @@ begin
     else
       title = d["title"]
     end
+    title_list = TitleList.new(title.to_s)
     season = d["season"] || season || 1
     episode = d["episode"] || episode || 1
     type = d["type"] || "auto"
@@ -824,9 +868,9 @@ begin
       track_names << { :name => name, :title => title }
     else
       d["tracks"].each do |t|
+        title = title_list.next
         track_name = "#{name} - S#{'%02d' % season}E#{'%02d' % episode} - #{t}"
         track_names << { :name => track_name, :title => title }
-        title += 1
         episode += 1
       end
     end
@@ -838,7 +882,7 @@ begin
         disk, video_stream, audio_streams, sub_streams) }
   end
 
-  tracks.each { |t| puts t.name }
+  tracks.each { |t| puts "#{t.title} -> #{t.name}" }
   
   # Process all tracks
   tracks.each do |t| 
