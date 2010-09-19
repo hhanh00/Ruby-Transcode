@@ -687,7 +687,7 @@ class Track
         %x{#{demux_cmd}}
         if @video_type == "auto" then
           set_video_type 
-          redo if @type != "film"
+          redo if @type != :ff
         end
         break
       end
