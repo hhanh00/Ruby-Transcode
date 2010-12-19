@@ -579,12 +579,13 @@ class Track
     :fps, :ivtc, :interlaced, :logfile
   attr_accessor :type, :size
   
-  def initialize(outdir, video_type, size, title, name, chapters, disk, video_stream, audio_streams, sub_streams)
+  def initialize(outdir, video_type, size, title, name, chapters, opt, disk, video_stream, audio_streams, sub_streams)
     @outdir = outdir
     @video_type = video_type
     @title = title
-    @vts = disk.title_map[title][:vts]
-    @pgc = disk.title_map[title][:pgc]
+    @opt = opt
+    @vts = opt[:vts] || disk.title_map[title][:vts]
+    @pgc = opt[:pgc] || disk.title_map[title][:pgc]
     @name = name
     @chapters = chapters
     @disk = disk
@@ -905,7 +906,7 @@ begin
           chapters = t["c"]
         end
         track_name = "#{name} - S#{'%02d' % season}E#{'%02d' % episode} - #{tt}"
-        track_names << { :name => track_name, :title => title, :chapters => chapters }
+        track_names << { :name => track_name, :title => title, :chapters => chapters, :vts => d["vts"], :pgc => d["pgc"] }
         episode += 1
       end
     end
@@ -913,7 +914,7 @@ begin
     # Skip track if done
     track_names.delete_if { |t| tracks_done.has_key?(t[:name]) }
     tracks += track_names.map { |t|
-      Track.new(outdir, type, project["size"], t[:title], t[:name], t[:chapters],
+      Track.new(outdir, type, project["size"], t[:title], t[:name], t[:chapters], t,
         disk, video_stream, audio_streams, sub_streams) }
   end
 
