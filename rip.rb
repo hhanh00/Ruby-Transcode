@@ -472,8 +472,9 @@ class SubtitleStream < Stream
 end
 
 class VobSubStream < Stream
-  def initialize(track, sub_streams)
+  def initialize(track, delay, sub_streams)
     @track = track
+    @delay = delay
     @sub_streams = sub_streams
   end
   
@@ -488,7 +489,7 @@ class VobSubStream < Stream
   end
   
   def mux
-    path = "#{@track.tempdir}\\\VTS_#{'%02d' % @track.vts}.IDX"
+    path = "#{@track.tempdir}\\\VTS_#{'%02d' % @track.vts}b.IDX"
     # Mux contained subtitle streams
     x = @sub_streams.zip(0...@sub_streams.length)
     arg = x.map { |a| a[0].mux(a[1]) }.join(' ')
@@ -522,6 +523,16 @@ private
       vobsub_cmd = "rundll32.exe vobsub.dll,Configure #{vobsub_param}"
       @track.logfile.puts vobsub_cmd
       %x{#{vobsub_cmd}}
+    }
+    
+    make_file("#{@track.tempdir}\\VTS_#{'%02d' % @track.vts}b.idx") {
+      File.open("#{@track.tempdir}\\VTS_#{'%02d' % @track.vts}b.idx", "w") do |fw|
+        File.foreach("#{@track.tempdir}\\VTS_#{'%02d' % @track.vts}.idx") do |line|
+          fw.puts line
+          fw.puts "delay: -#{@delay}" if line =~ /id:/
+        end
+      end
+      FileUtils.cp "#{@track.tempdir}\\VTS_#{'%02d' % @track.vts}.sub", "#{@track.tempdir}\\VTS_#{'%02d' % @track.vts}b.sub"
     }
   end
 end
@@ -568,19 +579,24 @@ class Track
     :fps, :ivtc, :interlaced, :logfile
   attr_accessor :type, :size
   
-  def initialize(outdir, video_type, size, title, name, disk, video_stream, audio_streams, sub_streams)
+  def initialize(outdir, video_type, size, title, name, chapters, disk, video_stream, audio_streams, sub_streams)
     @outdir = outdir
     @video_type = video_type
     @title = title
     @vts = disk.title_map[title][:vts]
     @pgc = disk.title_map[title][:pgc]
     @name = name
+    @chapters = chapters
     @disk = disk
     @video_stream = video_stream
     @audio_streams = audio_streams
     @sub_streams = sub_streams
     @size = size && size * 1024 * 1024
     @tempdir = "#{$tempdir}\\#{@disk.ord}.#{@vts}.#{@pgc}"
+    if not chapters.nil? then
+      x = TitleList.new(chapters).next()
+      @tempdir += ".#{x}"
+    end
     @path = "#{@tempdir}\\VTS_#{'%02d' % @vts}"
   end
   
@@ -603,7 +619,13 @@ class Track
   def decrypt
     make_file ("#{@tempdir}\\VTS_#{'%02d' % @vts}_0.IFO") {
       green("Decrypting")
-      decrypt_cmd = "\"#{$decrypterPath}\" /SRC #{@disk.drive_letter}: /DEST \"#{@tempdir}\" /VTS #{@vts} /PGC #{@pgc} /ANGLE 1 /MODE IFO /START /CLOSE"
+      decrypt_cmd = "\"#{$decrypterPath}\" /SRC #{@disk.drive_letter}: /DEST \"#{@tempdir}\" /VTS #{@vts} /PGC #{@pgc}"
+      if not @chapters.nil? then
+        chapter_list = TitleList.new(@chapters)
+        ch = chapter_list.titles
+        decrypt_cmd += " /CHAPTERS " + ch.join(" ")
+      end
+      decrypt_cmd += "  /ANGLE 1 /MODE IFO /START /CLOSE"
       @logfile.puts decrypt_cmd
       %x{#{decrypt_cmd}}
     }
@@ -619,6 +641,7 @@ class Track
     substream_index = 0
     sup_index_set = []
     max_channels = 0
+    video_delay = nil
     video = nil
     File.open("#{@tempdir}\\VTS_#{'%02d' % @vts} - Stream Information.txt", "r:ISO-8859-1") do |f|
       while (line = f.gets)
@@ -651,6 +674,9 @@ class Track
         when "Video"
           info = info.split(' / ', 7)
           dar = info[2]
+          delay = info[4]
+          delay =~ /PTS: (.+)/
+          video_delay = $1.gsub('.', ':')
           @video_stream.set_dar(dar)
           video = VideoStream.new(self, id, info, @video_stream)
         end
@@ -667,7 +693,7 @@ class Track
     # Take all the subtitle streams that have the lowest priority number
     best_sub = sub_streams.min { |a,b| a.stream.priority <=> b.stream.priority }
     sub_streams = sub_streams.delete_if { |a| a.stream.priority > best_sub.stream.priority }
-    @streams << VobSubStream.new(self, sub_streams) if sub_streams.length != 0
+    @streams << VobSubStream.new(self, video_delay, sub_streams) if sub_streams.length != 0
     @streams << ChapterStream.new(self)
     @streams << video
   end
@@ -757,6 +783,8 @@ class Track
 end
 
 class TitleList
+  attr_reader :titles
+  
   def initialize(title_string)
     @title_string = title_string
     @title_ranges = @title_string.split(',')
@@ -868,9 +896,16 @@ begin
       track_names << { :name => name, :title => title }
     else
       d["tracks"].each do |t|
-        title = title_list.next
-        track_name = "#{name} - S#{'%02d' % season}E#{'%02d' % episode} - #{t}"
-        track_names << { :name => track_name, :title => title }
+        if t["n"].nil? then
+          title = title_list.next
+          tt = t
+          chapters = nil
+        else
+          tt = t["n"]
+          chapters = t["c"]
+        end
+        track_name = "#{name} - S#{'%02d' % season}E#{'%02d' % episode} - #{tt}"
+        track_names << { :name => track_name, :title => title, :chapters => chapters }
         episode += 1
       end
     end
@@ -878,7 +913,7 @@ begin
     # Skip track if done
     track_names.delete_if { |t| tracks_done.has_key?(t[:name]) }
     tracks += track_names.map { |t|
-      Track.new(outdir, type, project["size"], t[:title], t[:name], 
+      Track.new(outdir, type, project["size"], t[:title], t[:name], t[:chapters],
         disk, video_stream, audio_streams, sub_streams) }
   end
 
