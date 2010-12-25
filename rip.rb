@@ -675,7 +675,7 @@ class Track
         when "Video"
           info = info.split(' / ', 7)
           dar = info[2]
-          delay = info[4]
+          delay = info[-2]
           delay =~ /PTS: (.+)/
           video_delay = $1.gsub('.', ':')
           @video_stream.set_dar(dar)
