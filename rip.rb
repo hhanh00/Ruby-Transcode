@@ -251,7 +251,7 @@ class AudioStream < Stream
   
   def mux
     lang = @track.disk.title_map[@track.title][:audio_langcode][@index]
-    "--language 0:#{lang} " +
+    lang[0].to_i != 0 ? "--language 0:#{lang} " : "" +
     "--sync 0:#{@delay} " +
     "-D -a 0 -S -T \"#{@path}\""
   end
@@ -644,6 +644,7 @@ class Track
     max_channels = 0
     video_delay = nil
     video = nil
+	first_aud_stream = nil
     File.open("#{@tempdir}\\VTS_#{'%02d' % @vts} - Stream Information.txt", "r:ISO-8859-1") do |f|
       while (line = f.gets)
         s = nil
@@ -669,7 +670,9 @@ class Track
           language = info[4]
           if codec == 'AC3' then
             t = @audio_streams.find { |t| t.language == language }
-            aud_streams << AudioStream.new(self, id, audio_index, channels, info, t) if t
+            x = AudioStream.new(self, id, audio_index, channels, info, t)
+            aud_streams << x if t
+            first_aud_stream ||= x
           end
           audio_index += 1
         when "Video"
@@ -685,11 +688,15 @@ class Track
     end
 
     # Take all the audio streams that have the lowest priority number
-    best_audio = aud_streams.min { |a,b| a.stream.priority <=> b.stream.priority }
-    aud_streams = aud_streams.delete_if { |a| a.stream.priority > best_audio.stream.priority }
-    # Keep only the ones that have the highest number of channels
-    max_channels = aud_streams.max { |a,b| a.channels <=> b.channels }
-    @streams = aud_streams.delete_if { |a| a.channels < max_channels.channels }
+    if aud_streams.length != 0 then
+      best_audio = aud_streams.min { |a,b| a.stream.priority <=> b.stream.priority }
+      aud_streams = aud_streams.delete_if { |a| a.stream.priority > best_audio.stream.priority }
+      # Keep only the ones that have the highest number of channels
+      max_channels = aud_streams.max { |a,b| a.channels <=> b.channels }
+      @streams = aud_streams.delete_if { |a| a.channels < max_channels.channels }
+    else
+      @streams << first_aud_stream
+    end
     
     # Take all the subtitle streams that have the lowest priority number
     best_sub = sub_streams.min { |a,b| a.stream.priority <=> b.stream.priority }
