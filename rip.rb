@@ -901,10 +901,10 @@ begin
     type = d["type"] || "auto"
     track_names = []
     if d["tracks"].nil? then
-      track_names << { :name => name, :title => title }
+      track_names << { :name => name, :title => title, :vts => d["vts"], :pgc => d["pgc"] }
     else
       d["tracks"].each do |t|
-        if t["n"].nil? then
+        if t.kind_of? String then
           title = title_list.next
           tt = t
           chapters = nil
