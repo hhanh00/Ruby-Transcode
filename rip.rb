@@ -73,18 +73,25 @@ end
 # Video settings
 class Video
   attr_accessor :crop
-  attr_reader :bitrate, :dx, :dy, :autocrop
-  def initialize(crop, bitrate)
+  attr_reader :bitrate, :dx, :dy, :autocrop, :type
+  def initialize(crop, bitrate, type)
     @crop = crop
     @autocrop = crop.nil?
     @bitrate = bitrate
+    @type = type
   end
   
   def set_dar(dar)
     dar =~ /(\d+):(\d+)/
     darX, darY = $1.to_i, $2.to_i
-    @dx = darX * 2
-    @dy = darY * 3
+    case @type
+      when "pal"
+        @dx = darX * 4
+        @dy = darY * 5
+      else
+        @dx = darX * 2
+        @dy = darY * 3
+    end
   end
 end
 
@@ -305,8 +312,11 @@ class VideoStream < Stream
     path = "#{@path}.264"
     vs = @track.video_stream
     c = vs.crop
-    ar = round_to((720 - c.left - c.right ).to_f / (480 - c.top - c.bottom) * vs.dx / vs.dy, 0.01)
-    (@track.type == :hybrid ? " --timecodes \"0:#{@track.tempdir}\\timecodes.txt\"" : "--default-duration 0:#{@track.fps}000/1001fps") +
+    width = 720
+    height = @stream.type == "pal" ? 576 : 480
+    ar = round_to((width - c.left - c.right ).to_f / (height - c.top - c.bottom) * vs.dx / vs.dy, 0.01)
+    real_fps = @stream.type == "pal" ? "#{@track.fps}fps" : "#{@track.fps}000/1001fps"
+    (@track.type == :hybrid ? " --timecodes \"0:#{@track.tempdir}\\timecodes.txt\"" : "--default-duration 0:#{real_fps}") +
     " --aspect-ratio 0:#{ar} " +
     "-d 0 -A -S -T \"#{path}\""
   end
@@ -730,6 +740,10 @@ class Track
   
   # Based on the video type, set the FPS and the frame type
   def set_video_type
+    if @video_stream.type == "pal"
+      @video_type = "pal"
+    end
+  
     if @video_type == "auto" && File.exists?("#{@tempdir}\\VTS_#{'%02d' % @vts}_1.log")
       @type = parse_demux_log
       @video_type = nil
@@ -744,11 +758,15 @@ class Track
           @type = :ivtc
         when "hybrid"
           @type = :hybrid
+        when "pal"
+          @type = :pal
       end
     end
     case @type
       when :ff, :ivtc
         @fps = 24
+      when :pal
+        @fps = 25
       else
         @fps = 30
     end
@@ -858,7 +876,7 @@ begin
   if !project["crop"].nil? then
     c = Crop.new(project["crop"]["left"], project["crop"]["top"], project["crop"]["right"], project["crop"]["bottom"])
   end
-  video_stream = Video.new(c, project["bitrate"])
+  video_stream = Video.new(c, project["bitrate"], project["type"])
   audio_streams = project["audio"].map { |lang, priority| Audio.new(lang, priority) }
   sub_streams = project["sub"].map { |lang, priority| Sub.new(lang, priority) }
   
