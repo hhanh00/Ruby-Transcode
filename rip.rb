@@ -796,13 +796,14 @@ class Track
     mux_streams.delete_if { |s| s.merit < 0 }
     mux_streams.each_with_index { |s,i| s.mux_index = i }
     track_order = mux_streams.sort { |x,y| x.merit <=> y.merit }.map{ |s| s.track_list }.join(',')
-    mkv_file = "#{@outdir}\\#{@name}.mkv".encode("ISO-8859-1")
+    mkv_file = "#{@outdir}\\#{@name}\\#{@name}.mkv".encode("ISO-8859-1")
     temp_file = "#{@outdir}\\temp.mkv"
     make_file(mkv_file) {
       green("Remuxing")
       mux_cmd = "\"#{$mkvmergePath}\" -o \"#{temp_file}\" " + @streams.map { |s| s.mux }.join(' ') + " --track-order \"#{track_order}\""
       @logfile.puts mux_cmd
       %x{#{mux_cmd}}
+      FileUtils.mkdir_p("#{@outdir}\\#{@name}")
       $rename.Call(temp_file, mkv_file)
     }
   end
@@ -918,16 +919,22 @@ begin
     episode = d["episode"] || episode || 1
     type = d["type"] || "auto"
     track_names = []
-    if d["tracks"].nil? then
+    names = d["tracks"]
+    if !d["count"].nil? then
+      names = []
+      count = d["count"].to_i
+      (0...count).each { |i| names << "" }
+    end
+    if names.nil? then
       track_names << { :name => name, :title => title, :vts => d["vts"], :pgc => d["pgc"] }
     else
-      d["tracks"].each do |t|
+      names.each do |t|
         if t.kind_of? String then
           title = title_list.next
           tt = t
           chapters = nil
         else
-          tt = t["n"]
+          tt = t["n"] || ""
           chapters = t["c"]
         end
         track_name = "#{name} - S#{'%02d' % season}E#{'%02d' % episode} - #{tt}"
