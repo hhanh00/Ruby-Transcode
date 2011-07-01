@@ -258,7 +258,7 @@ class AudioStream < Stream
   
   def mux
     lang = @track.disk.title_map[@track.title][:audio_langcode][@index]
-    lang[0].to_i != 0 ? "--language 0:#{lang} " : "" +
+    (lang[0].ord != 0 ? "--language 0:#{lang} " : "") +
     "--sync 0:#{@delay} " +
     "-D -a 0 -S -T \"#{@path}\""
   end
@@ -928,7 +928,7 @@ begin
     if !d["count"].nil? then
       names = []
       count = d["count"].to_i
-      (0...count).each { |i| names << "" }
+      (0...count).each { |i| names << "unknown" }
     end
     if names.nil? then
       track_names << { :name => name, :title => title, :vts => d["vts"], :pgc => d["pgc"], :tvshow => false }
@@ -967,6 +967,6 @@ begin
 end while more_work
 
 if shutdown then
-  shutdown_cmd = "psshutdown -s"
+  shutdown_cmd = "\\bin\\psshutdown -s"
   %x{#{shutdown_cmd}}
 end
