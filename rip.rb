@@ -294,11 +294,8 @@ class VideoStream < Stream
         encode0 
       }
     end
-    make_file ("#{@path}.stats") {
-      encode1
-    }
     make_file ("#{@path}.264") {
-      encode2
+      encode_vid
     }
     @ac.ole_free
     @ac = nil
@@ -443,23 +440,11 @@ EOS
     %x{#{avs2yuv_cmd}}
   end
   
-  def encode1
-    green("Video encoding - pass 1")
+  def encode_vid
+    green("Video encoding")
     path = "#{@track.tempdir}\\VTS_#{'%02d' % @track.vts}"
     x264_opt = "--profile high --sar #{@track.video_stream.dx}:#{@track.video_stream.dy} --preset #{$x264preset} " +
-    "--tune film --pass 1 --bitrate #{@bitrate} --stats \"#{path}.stats\" --thread-input --qpfile \"#{@track.tempdir}\\qpfile.txt\" --output NUL"
-    if $is64OS then
-      run_x264_64(x264_opt)
-    else
-      run_x264_32(x264_opt)
-    end
-  end
-
-  def encode2
-    green("Video encoding - pass 2")
-    path = "%s\\VTS_%02d" % [@track.tempdir, @track.vts]
-    x264_opt = "--profile high --sar #{@track.video_stream.dx}:#{@track.video_stream.dy} --preset #{$x264preset} " +
-    "--tune film --pass 2 --bitrate #{@bitrate} --stats \"#{path}.stats\" --thread-input  --qpfile \"#{@track.tempdir}\\qpfile.txt\" --aud --output \"#{path}.264\""
+    "--tune film --crf 18 --qpfile \"#{@track.tempdir}\\qpfile.txt\" --output \"#{path}.264\""
     if $is64OS then
       run_x264_64(x264_opt)
     else
